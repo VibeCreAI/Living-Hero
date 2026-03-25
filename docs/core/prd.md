@@ -7,7 +7,7 @@ exploration (Heroes of Might and Magic inspired) - Real-time tactical
 battles (RTS-inspired) - AI-driven hero commanders (core innovation)
 
 The defining feature: Players do not directly control units.\
-Players **talk to** AI-powered hero commanders (running on **BitNet local LLM**),
+Players **talk to** AI-powered hero commanders (running on **Ollama local LLM**),
 who interpret, reason, and execute strategies. Heroes control sub-units
 through code-based deterministic systems.
 
@@ -125,7 +125,7 @@ The player does NOT micromanage units.
 
 ### Core Role
 
-Heroes are **LLM-powered commanders** running on BitNet (local inference).
+Heroes are **LLM-powered commanders** running on Ollama (local inference).
 They are the player's strategic partners — not tools, but collaborators
 with distinct personalities.
 
@@ -156,9 +156,11 @@ with distinct personalities.
 
 ### LLM Technology
 
--   Model: **BitNet b1.58-2B-4T** (Microsoft, 2B params, 1.58-bit quantized)
--   Runs locally on CPU — 0.4GB memory, ~29ms/token
--   No cloud dependency, no API costs, full offline capability
+-   Runtime: **Ollama** (local LLM server, wraps llama.cpp)
+-   Default model: configurable (recommended: `phi3.5`, `qwen2.5:3b`, or `llama3.2:3b`)
+-   Runs locally on CPU (GPU optional) — no cloud dependency, no API costs
+-   Bundled with game via **Tauri sidecar** — zero extra setup for players
+-   Model auto-downloaded on first launch (~2-3GB, cached locally)
 -   Fallback: heuristic rule-based brain when LLM unavailable
 
 ------------------------------------------------------------------------
@@ -196,9 +198,9 @@ hero explains reasoning back to player
 
 Two-tier system:
 
-**Hero AI (BitNet LLM):**
+**Hero AI (Ollama LLM):**
 -   Input: structured battlefield summary (JSON) + player's natural language message
--   Processing: local LLM inference via BitNet server
+-   Processing: local LLM inference via Ollama server
 -   Output: tactical intent (structured `HeroDecision`) + conversational response
 
 **Sub-Unit AI (Code-only):**
@@ -322,8 +324,8 @@ Players should:
 -   React (UI)
 -   TypeScript (code)
 -   Vite (build tool)
--   BitNet b1.58-2B-4T (hero AI — local LLM, CPU inference)
--   bitnet.cpp / llama-server (inference server, OpenAI-compatible API)
+-   Ollama (hero AI — local LLM server, OpenAI-compatible API)
+-   Tauri (desktop app wrapper — bundles Ollama as sidecar)
 
 ------------------------------------------------------------------------
 
@@ -345,7 +347,7 @@ Players should:
 -   PvP
 -   backend
 -   monetization
--   BitNet integration (implemented — see prompt 03b)
+-   Ollama LLM integration (implemented — see prompt 03b)
 
 ------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-# Living Heros --- Prompt #3b: BitNet LLM Integration (Hero Brain System)
+# Living Heros --- Prompt #3b: Ollama LLM Integration (Hero Brain System)
 
 ## CONTEXT
 
@@ -11,9 +11,10 @@ Current system includes:
 - HeroScheduler → HeroSummaryBuilder → HeroDecisionProvider → IntentExecutor pipeline
 - Player command system (preset: Advance/Hold/Protect/Focus)
 - React UI shell with BattleHUD
+- **Tauri desktop wrapper** with Ollama sidecar (see prompt 00)
 
-Your task is to integrate **BitNet b1.58-2B-4T** as the **primary hero
-brain**, replacing the heuristic scoring system with a local LLM that:
+Your task is to integrate **Ollama** as the **primary hero brain**,
+replacing the heuristic scoring system with a local LLM that:
 - Receives natural language from the player
 - Reasons about the battlefield using structured context
 - Outputs tactical decisions AND conversational responses
@@ -34,7 +35,7 @@ If conflict exists → follow **TDD**.
 
 ## GOAL
 
-Replace heuristic hero brain with **BitNet local LLM** while:
+Replace heuristic hero brain with **Ollama local LLM** while:
 - Keeping the `IHeroDecisionProvider` interface unchanged
 - Adding natural language player ↔ hero conversation
 - Maintaining deterministic sub-unit behavior (code-only)
@@ -47,7 +48,7 @@ Replace heuristic hero brain with **BitNet local LLM** while:
 
 ### 1. TWO-TIER AI (MANDATORY)
 
-- **Hero = LLM brain** (BitNet) — reasons, decides, converses
+- **Hero = LLM brain** (Ollama) — reasons, decides, converses
 - **Sub-units = code-only** — deterministic, no LLM involvement
 - LLM outputs `HeroDecision` → `IntentExecutor` applies to units via code
 
@@ -65,7 +66,7 @@ Replace heuristic hero brain with **BitNet local LLM** while:
 
 ### 4. FALLBACK REQUIRED
 
-- If BitNet server is unavailable → use `LocalRuleBasedHeroBrain`
+- If Ollama server is unavailable → use `LocalRuleBasedHeroBrain`
 - If LLM response is malformed → use fallback decision
 - If response exceeds timeout (3s) → use fallback
 
@@ -76,36 +77,50 @@ Replace heuristic hero brain with **BitNet local LLM** while:
 
 ---
 
-# BITNET OVERVIEW
+# OLLAMA OVERVIEW
 
-## What Is BitNet?
+## What Is Ollama?
 
-BitNet b1.58-2B-4T is a **1.58-bit quantized LLM** from Microsoft:
-- 2 billion parameters, trained on 4 trillion tokens
-- Weights are ternary: {-1, 0, +1}
-- Memory: **0.4 GB** (non-embedding)
-- CPU decode latency: **~29ms/token**
-- Context window: 4,096 tokens
-- License: MIT
+Ollama is a **local LLM runtime** that wraps llama.cpp with:
+- Simple CLI: `ollama pull`, `ollama serve`, `ollama run`
+- OpenAI-compatible REST API built-in
+- Model library with hundreds of models
+- Easy model management (pull, cache, delete)
+- Pre-built binaries for Windows, macOS, Linux
+- GPU acceleration (CUDA, Metal) when available, CPU fallback
 
-It runs entirely on CPU — no GPU required. Fast enough for real-time
-game AI decisions (~1-2 seconds for a 50-token response).
+## Why Ollama Over BitNet?
 
-## GitHub & Model
+- **Better model quality**: 3-4B models with 4-bit quantization produce
+  significantly better structured JSON output and personality expression
+  than BitNet's 2B ternary model
+- **Model flexibility**: Players/devs can swap models based on hardware
+- **Easier distribution**: Pre-built binaries, no compilation required
+- **Bundleable**: Ollama binary can be shipped as a Tauri sidecar
+- **Same API**: OpenAI-compatible, identical integration code
 
-- Framework: https://github.com/microsoft/BitNet
-- Model: https://huggingface.co/microsoft/bitnet-b1.58-2B-4T
+## Recommended Models
 
-## Inference Server
+| Model | Params | Size | Speed (CPU) | Quality |
+|-------|--------|------|-------------|---------|
+| `phi3.5` | 3.8B | ~2.2GB | ~50ms/tok | Good structured output |
+| `qwen2.5:3b` | 3B | ~1.9GB | ~45ms/tok | Strong reasoning |
+| `llama3.2:3b` | 3B | ~2.0GB | ~45ms/tok | Good conversation |
+| `gemma2:2b` | 2.6B | ~1.6GB | ~35ms/tok | Fastest, decent quality |
 
-BitNet includes `run_inference_server.py` which wraps `llama-server`
-(llama.cpp). This exposes an **OpenAI-compatible REST API**:
+Default recommendation: `phi3.5` (best balance of speed, quality, and
+structured output reliability for game AI).
+
+## API
+
+Ollama exposes an OpenAI-compatible endpoint:
 
 ```
-POST http://localhost:8080/v1/chat/completions
+POST http://localhost:11434/v1/chat/completions
 Content-Type: application/json
 
 {
+  "model": "phi3.5",
   "messages": [
     {"role": "system", "content": "...hero personality..."},
     {"role": "user", "content": "...battlefield context + player message..."}
@@ -131,54 +146,34 @@ Response:
 
 # IMPLEMENTATION STEPS
 
-## STEP 1 --- BITNET SERVER SETUP
+## STEP 1 --- OLLAMA SETUP (DEV MODE)
 
 ### Prerequisites
 
-- Python >= 3.9
-- CMake >= 3.22
-- Clang >= 18 (Windows: Visual Studio 2022 with C++ tools)
-
-### Installation
-
-```bash
-git clone https://github.com/microsoft/BitNet.git
-cd BitNet
-pip install -r requirements.txt
-
-# Download model and build optimized kernels
-python setup_env.py --hf-repo microsoft/bitnet-b1.58-2B-4T-gguf -q i2_s
-
-# Start inference server
-python run_inference_server.py \
-  --model models/bitnet-b1.58-2B-4T-gguf/ggml-model-i2_s.gguf \
-  --host 127.0.0.1 \
-  --port 8080 \
-  --threads 4 \
-  --ctx-size 2048 \
-  --n-predict 100 \
-  --temperature 0.7
-```
+- Ollama installed: https://ollama.com/download
+- Pull a model: `ollama pull phi3.5`
+- Start server: `ollama serve` (runs on port 11434)
 
 ### Verification
 
 ```bash
-curl http://localhost:8080/v1/chat/completions \
+curl http://localhost:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "phi3.5",
     "messages": [{"role": "user", "content": "Hello, who are you?"}],
     "max_tokens": 50
   }'
 ```
 
-Create a helper script `scripts/start-bitnet.sh` (and `.bat` for Windows)
-to launch the server with game-optimized settings.
+Note: In production, Ollama is launched automatically by the Tauri
+sidecar (see prompt 00). Developers run it manually during development.
 
 ---
 
-## STEP 2 --- BITNET CLIENT SERVICE
+## STEP 2 --- LLM CLIENT SERVICE
 
-Create `src/game/ai/BitNetClient.ts`:
+Create `src/game/ai/LLMClient.ts`:
 
 ```ts
 interface ChatMessage {
@@ -186,16 +181,17 @@ interface ChatMessage {
   content: string;
 }
 
-interface BitNetResponse {
+interface LLMResponse {
   chatResponse: string;
   decision: HeroDecision | null;
 }
 
-class BitNetClient {
+class LLMClient {
   private baseUrl: string;
+  private model: string;
   private available: boolean;
 
-  constructor(baseUrl: string = 'http://localhost:8080');
+  constructor(baseUrl: string = 'http://localhost:11434', model: string = 'phi3.5');
 
   async healthCheck(): Promise<boolean>;
 
@@ -203,12 +199,12 @@ class BitNetClient {
     messages: ChatMessage[],
     maxTokens?: number,
     temperature?: number
-  ): Promise<BitNetResponse>;
+  ): Promise<LLMResponse>;
 }
 ```
 
 Responsibilities:
-- Send chat completion requests to BitNet server
+- Send chat completion requests to Ollama server
 - Parse response into `HeroDecision` JSON + conversational text
 - Handle timeouts (3 second max)
 - Track server availability
@@ -291,18 +287,18 @@ CURRENT ORDER: ${summary.currentCommand?.type ?? 'none'}`;
 
 ---
 
-## STEP 5 --- BITNET HERO BRAIN
+## STEP 5 --- OLLAMA HERO BRAIN
 
-Create `src/game/ai/BitNetHeroBrain.ts`:
+Create `src/game/ai/OllamaHeroBrain.ts`:
 
 Implements `IHeroDecisionProvider`:
 
 ```ts
-class BitNetHeroBrain implements IHeroDecisionProvider {
-  private client: BitNetClient;
+class OllamaHeroBrain implements IHeroDecisionProvider {
+  private client: LLMClient;
   private conversationHistory: ChatMessage[];
 
-  constructor(client: BitNetClient);
+  constructor(client: LLMClient);
 
   async decideAsync(
     summary: HeroSummary,
@@ -318,7 +314,7 @@ Flow:
 1. Build system prompt from hero personality
 2. Build context prompt from HeroSummary
 3. Append player message (if any)
-4. Send to BitNet server via `BitNetClient`
+4. Send to Ollama server via `LLMClient`
 5. Parse response: extract `decision` JSON block + conversational text
 6. Validate decision fields (clamp positions, verify targetIds)
 7. Return decision + chat response
@@ -433,10 +429,10 @@ Modify `src/game/scenes/BattleScene.ts`:
 
 ## STEP 9 --- CONNECTION STATUS UI
 
-Create `src/app/react/components/hud/BitNetStatus.tsx`:
+Create `src/app/react/components/hud/LLMStatus.tsx`:
 
-Small indicator showing BitNet server status:
-- Green dot: "AI Online" (BitNet connected)
+Small indicator showing Ollama server status:
+- Green dot: "AI Online" (Ollama connected, model loaded)
 - Yellow dot: "AI Connecting..." (health check in progress)
 - Red dot: "AI Offline (Fallback)" (using heuristic brain)
 
@@ -450,8 +446,9 @@ Create `src/game/ai/aiConfig.ts`:
 
 ```ts
 export const AI_CONFIG = {
-  bitnet: {
-    baseUrl: 'http://localhost:8080',
+  ollama: {
+    baseUrl: 'http://localhost:11434',
+    model: 'phi3.5',
     maxTokens: 100,
     temperature: 0.7,
     timeoutMs: 3000,
@@ -473,7 +470,7 @@ export const AI_CONFIG = {
 ## STEP 11 --- DETERMINISM & REPLAY COMPATIBILITY
 
 For replay system (Prompt #8):
-- **Record** BitNet decisions in replay data (do NOT re-execute LLM)
+- **Record** LLM decisions in replay data (do NOT re-execute LLM)
 - Each `HeroDecision` is timestamped and stored in `ReplayEvent[]`
 - On replay playback: inject recorded decisions at correct timestamps
 - This ensures identical replay even though LLM output is non-deterministic
@@ -490,11 +487,12 @@ type ReplayEvent =
 ## STEP 12 --- DEBUG OVERLAY
 
 Extend debug UI:
-- Show raw LLM prompt sent to BitNet
+- Show raw LLM prompt sent to Ollama
 - Show raw LLM response received
 - Show parsed `HeroDecision` JSON
 - Show latency per LLM call
 - Show fallback usage count
+- Show current model name
 - Toggle to view full conversation history
 
 ---
@@ -503,19 +501,15 @@ Extend debug UI:
 
 ```
 src/game/ai/
-  BitNetClient.ts          ← HTTP client for BitNet server
-  BitNetHeroBrain.ts       ← IHeroDecisionProvider implementation using LLM
-  heroPrompts.ts           ← System prompt builders per hero personality
-  contextBuilder.ts        ← HeroSummary → LLM context prompt
-  aiConfig.ts              ← Configuration constants
+  LLMClient.ts              ← HTTP client for Ollama server
+  OllamaHeroBrain.ts        ← IHeroDecisionProvider implementation using LLM
+  heroPrompts.ts            ← System prompt builders per hero personality
+  contextBuilder.ts         ← HeroSummary → LLM context prompt
+  aiConfig.ts               ← Configuration constants
 
 src/app/react/components/hud/
-  ChatPanel.tsx            ← Player ↔ hero conversation UI
-  BitNetStatus.tsx         ← Server connection indicator
-
-scripts/
-  start-bitnet.sh          ← Linux/Mac server launcher
-  start-bitnet.bat         ← Windows server launcher
+  ChatPanel.tsx             ← Player ↔ hero conversation UI
+  LLMStatus.tsx             ← Server connection indicator
 ```
 
 ---
@@ -527,16 +521,16 @@ scripts/
 - No multi-hero simultaneous LLM calls (one hero at a time for P0)
 - No conversation memory across battles (future feature)
 - No voice input/output
-- No model switching UI
+- No model switching UI (model configured in aiConfig.ts)
 
 ---
 
 ## IMPLEMENTATION PRIORITY
 
-1. BitNet server setup + health check
-2. BitNetClient (HTTP wrapper)
+1. Ollama dev setup + health check
+2. LLMClient (HTTP wrapper)
 3. Hero system prompts + context builder
-4. BitNetHeroBrain (IHeroDecisionProvider)
+4. OllamaHeroBrain (IHeroDecisionProvider)
 5. Async scheduler update
 6. Chat panel UI
 7. Connection status indicator
@@ -548,7 +542,7 @@ scripts/
 
 ## SUCCESS CRITERIA
 
-- BitNet server runs locally and responds to game requests
+- Ollama server runs locally and responds to game requests
 - Hero makes LLM-driven decisions that feel personality-consistent
 - Player can type natural language and hero responds in character
 - Sub-units follow hero decisions via code (deterministic)

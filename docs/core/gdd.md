@@ -12,7 +12,7 @@ The defining feature:
 
 > Players do NOT directly control units.\
 > Players **talk to** LLM-powered hero commanders who reason, decide,
-> and fight alongside them. Heroes run on **BitNet** (local LLM) and
+> and fight alongside them. Heroes run on **Ollama** (local LLM) and
 > control sub-units through deterministic code systems.
 
 ------------------------------------------------------------------------
@@ -39,7 +39,7 @@ The player is NOT:
 
 ### 3.1 Intelligent Heroes (LLM-Powered)
 
--   Heroes are **living AI agents** running on BitNet (local LLM)
+-   Heroes are **living AI agents** running on Ollama (local LLM)
 -   Each hero has a distinct personality expressed through LLM system prompts
 -   Players **converse** with heroes — heroes reason and explain decisions
 -   Heroes think, interpret, and decide — then tell the player why
@@ -111,7 +111,7 @@ Terrain-influenced positioning
 
 ### 6.1 Role
 
-Heroes are: - **LLM-powered commanders** (BitNet local inference) -
+Heroes are: - **LLM-powered commanders** (Ollama local inference) -
 Conversational partners the player strategizes with -
 Decision-makers who explain their reasoning - Controllers of code-based
 sub-units

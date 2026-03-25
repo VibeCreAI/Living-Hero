@@ -7,7 +7,7 @@ using: - Phaser 3 (game runtime) - React (UI layer) - TypeScript (strict
 typing) - Vite (build tool)
 
 It translates product and design into implementable systems that are: -
-deterministic - modular - AI-powered (BitNet local LLM for hero brains) - scalable (async PvP
+deterministic - modular - AI-powered (Ollama local LLM for hero brains) - scalable (async PvP
 ready)
 
 ------------------------------------------------------------------------
@@ -21,7 +21,7 @@ Phaser runs: - rendering - update loop - simulation
 React runs: - UI panels - menus - overlays
 
 AI runs: - decision layer only (intent-based)
-- Hero brains: **BitNet local LLM** (primary) or heuristic fallback
+- Hero brains: **Ollama local LLM** (primary) or heuristic fallback
 - Sub-units: code-only deterministic behavior (no LLM)
 
 ------------------------------------------------------------------------
@@ -158,22 +158,22 @@ update(dt){
 The game uses a **two-tier AI architecture**:
 
 **Tier 1 — Hero Brains (LLM-powered):**
-Heroes are intelligent commanders powered by **BitNet b1.58-2B-4T**, a
-1.58-bit local LLM from Microsoft. Players communicate with heroes via
-**natural language** (not just preset commands). Heroes reason about the
-battlefield, explain their decisions, and control sub-units.
+Heroes are intelligent commanders powered by a **local LLM** served via
+**Ollama**. Players communicate with heroes via **natural language**
+(not just preset commands). Heroes reason about the battlefield, explain
+their decisions, and control sub-units.
 
 **Tier 2 — Sub-Units (code-only):**
 Units are deterministic, reactive entities. They follow system rules and
 hero influence. No LLM involved — pure code execution.
 
-### BitNet Integration
+### Ollama Integration
 
--   Model: `microsoft/bitnet-b1.58-2B-4T` (2B params, 0.4GB memory, ~29ms/token on CPU)
--   Runtime: `bitnet.cpp` inference server (`llama-server` compatible)
--   API: OpenAI-compatible REST API at `localhost:8080`
--   Latency budget: ~1-2 seconds per decision (50-70 tokens)
--   Fallback: `LocalRuleBasedHeroBrain` if server unavailable
+-   Runtime: **Ollama** (local LLM server, bundles llama.cpp)
+-   Default model: configurable (recommended: `phi3.5`, `qwen2.5:3b`, or `llama3.2:3b`)
+-   API: OpenAI-compatible REST API at `localhost:11434/v1/chat/completions`
+-   Latency budget: ~1-3 seconds per decision (50-100 tokens)
+-   Fallback: `LocalRuleBasedHeroBrain` if Ollama unavailable
 
 ### AI Pipeline
 
@@ -185,7 +185,7 @@ HeroScheduler (triggers on timer, command change, HP threshold)
 HeroSummaryBuilder (structured battlefield context JSON)
   ↓
 HeroDecisionProvider interface
-  ├── BitNetHeroBrain (primary — calls local LLM server)
+  ├── OllamaHeroBrain (primary — calls local Ollama server)
   │     ├── System prompt: hero personality + traits
   │     ├── Context: HeroSummary JSON
   │     ├── User message: player's natural language command
@@ -205,7 +205,7 @@ IntentExecutor (converts decision → unit behavior, deterministic)
 
 #### HeroDecisionProvider
 -   interface: `decide(summary) → HeroDecision`
--   implementations: `BitNetHeroBrain`, `LocalRuleBasedHeroBrain`
+-   implementations: `OllamaHeroBrain`, `LocalRuleBasedHeroBrain`
 
 #### IntentExecutor
 -   converts intent → unit actions (deterministic)
@@ -239,22 +239,31 @@ No `any`.
 
 ------------------------------------------------------------------------
 
-## 13. BITNET REQUIREMENTS
+## 13. OLLAMA REQUIREMENTS
 
 ### Server Setup
--   BitNet inference server runs locally as a background process
--   Uses `llama-server` (llama.cpp) with BitNet b1.58-2B-4T GGUF model
--   Default: `localhost:8080`, OpenAI-compatible `/v1/chat/completions` endpoint
+-   Ollama runs locally, managed by **Tauri sidecar** in production
+-   Bundled Ollama binary launches automatically with the game
+-   Model downloaded on first launch (lazy pull with progress UI)
+-   Default: `localhost:11434`, OpenAI-compatible `/v1/chat/completions` endpoint
+-   Dev mode: developer runs `ollama serve` manually
 
 ### Communication Flow
--   Game client (TypeScript) → HTTP POST → BitNet server → JSON response
+-   Game client (TypeScript) → HTTP POST → Ollama server → JSON response
 -   Async: decisions requested via `fetch()`, non-blocking game loop
 -   Timeout: 3 seconds max, fallback to heuristic brain on failure
 
 ### Determinism for Replay
--   BitNet decisions are **recorded** (not re-executed) in replay data
+-   LLM decisions are **recorded** (not re-executed) in replay data
 -   Replay injects recorded `HeroDecision` at correct timestamps
 -   This ensures replay determinism even though LLM output is non-deterministic
+
+### Desktop Distribution (Tauri)
+-   Game is packaged as a Tauri desktop application
+-   Phaser + React + Vite frontend runs in Tauri webview (unchanged)
+-   Ollama binary bundled as Tauri sidecar (auto-launched on app start)
+-   Model management: auto-pull on first launch, cached locally
+-   Process lifecycle managed by Tauri Rust backend
 
 ------------------------------------------------------------------------
 
