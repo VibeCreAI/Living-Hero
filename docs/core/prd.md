@@ -7,8 +7,13 @@ exploration (Heroes of Might and Magic inspired) - Real-time tactical
 battles (RTS-inspired) - AI-driven hero commanders (core innovation)
 
 The defining feature: Players do not directly control units.\
-Players issue high-level commands, and heroes interpret and execute
-them.
+Players **talk to** AI-powered hero commanders (running on **BitNet local LLM**),
+who interpret, reason, and execute strategies. Heroes control sub-units
+through code-based deterministic systems.
+
+The core innovation: Heroes are **living AI agents** powered by a local
+language model. Players strategize *with* them using natural language,
+not just preset buttons.
 
 ------------------------------------------------------------------------
 
@@ -19,9 +24,10 @@ micromanagement to intelligent delegation.
 
 Core idea: "Players command minds, not units."
 
-The game should feel like: - commanding generals, not soldiers -
-influencing decisions, not clicking actions - observing intelligent
-behavior, not scripting it
+The game should feel like: - **talking to** intelligent commanders, not clicking buttons -
+strategizing *with* heroes, not issuing orders *at* them -
+observing emergent intelligent behavior, not scripting it -
+building trust (or frustration) with AI personalities that reason and explain
 
 ------------------------------------------------------------------------
 
@@ -119,29 +125,58 @@ The player does NOT micromanage units.
 
 ### Core Role
 
-Heroes are **AI-driven commanders**
+Heroes are **LLM-powered commanders** running on BitNet (local inference).
+They are the player's strategic partners — not tools, but collaborators
+with distinct personalities.
 
-### Responsibilities
+### Two-Tier Architecture
 
--   Interpret player commands
--   Make tactical decisions
--   Influence units
+-   **Hero (LLM brain):** Receives natural language from player + battlefield
+    context. Reasons, explains, and outputs tactical decisions.
+-   **Sub-units (code-only):** Deterministic entities that follow hero
+    decisions. No LLM involved — pure system rules.
+
+### Player-Hero Interaction
+
+-   Players communicate via **natural language chat** (primary) or preset
+    commands (quick access)
+-   Heroes **respond conversationally** explaining their reasoning
+-   Example: Player says "The archers are getting destroyed, do something!"
+    → Hero responds "Moving warriors to screen the archers. I'll hold the
+    flank." → Units reposition accordingly
 
 ### Hero Attributes
 
--   Intelligence → decision quality
--   Discipline → command adherence
--   Boldness → aggression
--   Caution → risk management
--   Empathy → ally prioritization
--   Decisiveness → commitment vs switching
+-   Intelligence → decision quality, context awareness
+-   Discipline → command adherence vs independent judgment
+-   Boldness → aggression, willingness to take risks
+-   Caution → risk management, retreat tendency
+-   Empathy → ally prioritization, protective instincts
+-   Decisiveness → commitment duration, less flip-flopping
+
+### LLM Technology
+
+-   Model: **BitNet b1.58-2B-4T** (Microsoft, 2B params, 1.58-bit quantized)
+-   Runs locally on CPU — 0.4GB memory, ~29ms/token
+-   No cloud dependency, no API costs, full offline capability
+-   Fallback: heuristic rule-based brain when LLM unavailable
 
 ------------------------------------------------------------------------
 
 ## 5.4 Command System
 
-### MVP Commands
+### Primary: Natural Language Chat
 
+Players type natural language messages to heroes during battle:
+-   "Focus the archers, they're shredding our front line"
+-   "Fall back and regroup, we're losing too many warriors"
+-   "Can you flank from the right while I send the archers forward?"
+
+Heroes respond conversationally and adjust their tactics.
+
+### Quick Commands (Preset Shortcuts)
+
+For fast access during combat:
 -   Protect
 -   Hold
 -   Advance
@@ -149,26 +184,34 @@ Heroes are **AI-driven commanders**
 
 ### Design Philosophy
 
-Commands are: - high-level - interpretable - not deterministic
-instructions
+Commands are: - natural language preferred (richer intent) -
+preset buttons for speed - interpreted by LLM hero, not executed literally -
+hero explains reasoning back to player
 
 ------------------------------------------------------------------------
 
 ## 5.5 AI System
 
-### Input
+### Architecture
 
--   Structured battlefield summary (JSON)
+Two-tier system:
 
-### Output
+**Hero AI (BitNet LLM):**
+-   Input: structured battlefield summary (JSON) + player's natural language message
+-   Processing: local LLM inference via BitNet server
+-   Output: tactical intent (structured `HeroDecision`) + conversational response
 
--   Tactical intent
+**Sub-Unit AI (Code-only):**
+-   Input: hero's decision + system rules
+-   Processing: deterministic code execution
+-   Output: movement, targeting, combat actions
 
 ### Constraints
 
--   No direct control
--   No per-frame thinking
--   Scheduled decisions only
+-   LLM outputs **intent only** — never controls simulation directly
+-   LLM runs on **scheduler** (every 2-3 seconds, not per-frame)
+-   Sub-units are **fully deterministic** — no randomness, no LLM
+-   Fallback to heuristic brain if LLM server unavailable
 
 ------------------------------------------------------------------------
 
@@ -279,6 +322,8 @@ Players should:
 -   React (UI)
 -   TypeScript (code)
 -   Vite (build tool)
+-   BitNet b1.58-2B-4T (hero AI — local LLM, CPU inference)
+-   bitnet.cpp / llama-server (inference server, OpenAI-compatible API)
 
 ------------------------------------------------------------------------
 
@@ -300,7 +345,7 @@ Players should:
 -   PvP
 -   backend
 -   monetization
--   BitNet integration
+-   BitNet integration (implemented — see prompt 03b)
 
 ------------------------------------------------------------------------
 

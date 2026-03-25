@@ -11,8 +11,9 @@
 The defining feature:
 
 > Players do NOT directly control units.\
-> Players issue high-level commands, and heroes interpret and execute
-> them.
+> Players **talk to** LLM-powered hero commanders who reason, decide,
+> and fight alongside them. Heroes run on **BitNet** (local LLM) and
+> control sub-units through deterministic code systems.
 
 ------------------------------------------------------------------------
 
@@ -20,33 +21,38 @@ The defining feature:
 
 The player is:
 
--   A supreme commander
--   Leading intelligent, semi-autonomous heroes
--   Influencing outcomes through strategy, not execution
+-   A supreme commander who **talks to** AI heroes
+-   Strategizing *with* intelligent, semi-autonomous commanders
+-   Influencing outcomes through conversation and trust, not execution
+-   Building relationships with heroes who have distinct personalities
 
 The player is NOT:
 
 -   A micromanaging RTS player
 -   A fast-click mechanical player
 -   A unit-level controller
+-   Issuing commands into a void — heroes **respond and explain**
 
 ------------------------------------------------------------------------
 
 ## 3. CORE DESIGN PILLARS
 
-### 3.1 Intelligent Heroes
+### 3.1 Intelligent Heroes (LLM-Powered)
 
--   Heroes think, interpret, and decide
--   Each hero behaves differently based on personality
--   Decisions feel intentional and explainable
+-   Heroes are **living AI agents** running on BitNet (local LLM)
+-   Each hero has a distinct personality expressed through LLM system prompts
+-   Players **converse** with heroes — heroes reason and explain decisions
+-   Heroes think, interpret, and decide — then tell the player why
+-   Sub-units follow hero decisions through code (no LLM)
 
 ------------------------------------------------------------------------
 
-### 3.2 Command Over Control
+### 3.2 Conversation Over Commands
 
--   Player gives intent, not instructions
--   Commands are interpreted, not executed literally
--   Trust and adaptation are core gameplay
+-   Player **talks to** heroes using natural language
+-   Heroes interpret, reason, and respond conversationally
+-   Quick-access preset commands available for speed (Advance, Hold, Protect, Focus)
+-   Trust and adaptation are core gameplay — heroes have opinions
 
 ------------------------------------------------------------------------
 
@@ -105,7 +111,10 @@ Terrain-influenced positioning
 
 ### 6.1 Role
 
-Heroes are: - Commanders - Decision-makers - Behavioral entities
+Heroes are: - **LLM-powered commanders** (BitNet local inference) -
+Conversational partners the player strategizes with -
+Decision-makers who explain their reasoning - Controllers of code-based
+sub-units
 
 ------------------------------------------------------------------------
 
@@ -142,19 +151,37 @@ Each hero has:
 
 ------------------------------------------------------------------------
 
-### 7.2 Command Philosophy
+### 7.2 Natural Language (Primary)
 
-Commands are: - vague enough for interpretation - meaningful enough to
-guide outcome
+Players type messages to heroes during battle:
+-   "The archers are getting overwhelmed, help them!"
+-   "I think we should flank from the right, what do you think?"
+-   "Pull back everyone, we need to regroup"
+
+Heroes respond conversationally:
+-   "On it. Sending warriors to screen the archers."
+-   "Risky, but I like it. Moving to flank position now."
+-   "Agreed. Pulling back to our starting position."
+
+### 7.3 Command Philosophy
+
+Natural language is the primary interface. Preset buttons are shortcuts.
+Heroes interpret intent — same message may produce different behavior
+from different hero personalities.
 
 ------------------------------------------------------------------------
 
-### 7.3 Example
+### 7.4 Example Flow
 
-Player: "Protect archers"
+Player types: "Protect the archers, they're getting destroyed"
 
-Hero: - moves to defensive position - intercepts enemies - uses
-defensive skills
+Hero (bold personality) responds: "I'll push forward and intercept those
+warriors before they reach the archers. Aggressive defense!"
+→ Moves units to engage enemies approaching archers
+
+Hero (cautious personality) responds: "Pulling warriors back to form a
+defensive line around the archers. We'll hold here."
+→ Repositions units defensively around archers
 
 ------------------------------------------------------------------------
 
@@ -243,15 +270,16 @@ Examples:
 
 Players must see:
 
--   current hero intent
--   recent decision
--   command influence
+-   **Chat log** with hero (natural language conversation)
+-   Current hero intent (visual indicator on battlefield)
+-   Hero's reasoning (conversational explanation)
 
-Examples:
+Examples of hero chat responses:
 
--   "Protecting Archers"
--   "Advancing (High Confidence)"
--   "Retreating (Low HP)"
+-   "Protecting archers — those warriors are too close for comfort."
+-   "Advancing with confidence. We outnumber them on this flank."
+-   "Pulling back. Too many losses, need to regroup."
+-   "I disagree with holding here, but you're the boss. Holding position."
 
 ------------------------------------------------------------------------
 
@@ -362,5 +390,6 @@ Living Heros is NOT about controlling units.
 
 It is about:
 
-> commanding intelligent heroes who interpret, decide, and fight with
-> you.
+> talking to intelligent heroes who think, reason, explain, and fight
+> alongside you. Heroes are living AI agents — not tools to command,
+> but partners to strategize with.

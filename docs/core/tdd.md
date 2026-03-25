@@ -7,7 +7,7 @@ using: - Phaser 3 (game runtime) - React (UI layer) - TypeScript (strict
 typing) - Vite (build tool)
 
 It translates product and design into implementable systems that are: -
-deterministic - modular - AI-ready (BitNet later) - scalable (async PvP
+deterministic - modular - AI-powered (BitNet local LLM for hero brains) - scalable (async PvP
 ready)
 
 ------------------------------------------------------------------------
@@ -21,6 +21,8 @@ Phaser runs: - rendering - update loop - simulation
 React runs: - UI panels - menus - overlays
 
 AI runs: - decision layer only (intent-based)
+- Hero brains: **BitNet local LLM** (primary) or heuristic fallback
+- Sub-units: code-only deterministic behavior (no LLM)
 
 ------------------------------------------------------------------------
 
@@ -151,21 +153,63 @@ update(dt){
 
 ## 9. AI ARCHITECTURE
 
-### HeroScheduler
+### Two-Tier AI Model
 
--   triggers AI decisions
+The game uses a **two-tier AI architecture**:
 
-### HeroSummaryBuilder
+**Tier 1 — Hero Brains (LLM-powered):**
+Heroes are intelligent commanders powered by **BitNet b1.58-2B-4T**, a
+1.58-bit local LLM from Microsoft. Players communicate with heroes via
+**natural language** (not just preset commands). Heroes reason about the
+battlefield, explain their decisions, and control sub-units.
 
--   builds local context
+**Tier 2 — Sub-Units (code-only):**
+Units are deterministic, reactive entities. They follow system rules and
+hero influence. No LLM involved — pure code execution.
 
-### HeroDecisionProvider
+### BitNet Integration
 
--   returns structured decision
+-   Model: `microsoft/bitnet-b1.58-2B-4T` (2B params, 0.4GB memory, ~29ms/token on CPU)
+-   Runtime: `bitnet.cpp` inference server (`llama-server` compatible)
+-   API: OpenAI-compatible REST API at `localhost:8080`
+-   Latency budget: ~1-2 seconds per decision (50-70 tokens)
+-   Fallback: `LocalRuleBasedHeroBrain` if server unavailable
 
-### IntentExecutor
+### AI Pipeline
 
--   converts intent → actions
+```
+Player Message (natural language or preset command)
+  ↓
+HeroScheduler (triggers on timer, command change, HP threshold)
+  ↓
+HeroSummaryBuilder (structured battlefield context JSON)
+  ↓
+HeroDecisionProvider interface
+  ├── BitNetHeroBrain (primary — calls local LLM server)
+  │     ├── System prompt: hero personality + traits
+  │     ├── Context: HeroSummary JSON
+  │     ├── User message: player's natural language command
+  │     └── Output: HeroDecision JSON + conversational response
+  └── LocalRuleBasedHeroBrain (fallback — heuristic scoring)
+  ↓
+IntentExecutor (converts decision → unit behavior, deterministic)
+```
+
+### Pipeline Components
+
+#### HeroScheduler
+-   triggers AI decisions on timer, command change, HP thresholds
+
+#### HeroSummaryBuilder
+-   builds structured battlefield context for LLM prompt
+
+#### HeroDecisionProvider
+-   interface: `decide(summary) → HeroDecision`
+-   implementations: `BitNetHeroBrain`, `LocalRuleBasedHeroBrain`
+
+#### IntentExecutor
+-   converts intent → unit actions (deterministic)
+-   AI never touches simulation directly
 
 ------------------------------------------------------------------------
 
@@ -195,15 +239,35 @@ No `any`.
 
 ------------------------------------------------------------------------
 
-## 13. FUTURE EXTENSIONS
+## 13. BITNET REQUIREMENTS
 
--   BitNet AI integration
+### Server Setup
+-   BitNet inference server runs locally as a background process
+-   Uses `llama-server` (llama.cpp) with BitNet b1.58-2B-4T GGUF model
+-   Default: `localhost:8080`, OpenAI-compatible `/v1/chat/completions` endpoint
+
+### Communication Flow
+-   Game client (TypeScript) → HTTP POST → BitNet server → JSON response
+-   Async: decisions requested via `fetch()`, non-blocking game loop
+-   Timeout: 3 seconds max, fallback to heuristic brain on failure
+
+### Determinism for Replay
+-   BitNet decisions are **recorded** (not re-executed) in replay data
+-   Replay injects recorded `HeroDecision` at correct timestamps
+-   This ensures replay determinism even though LLM output is non-deterministic
+
+------------------------------------------------------------------------
+
+## 14. FUTURE EXTENSIONS
+
+-   Multiple LLM hero personalities (different system prompts)
+-   Hero memory (conversation history across battles)
 -   async PvP
 -   replay system
 
 ------------------------------------------------------------------------
 
-## 14. SUCCESS CRITERIA
+## 15. SUCCESS CRITERIA
 
 -   deterministic simulation
 -   clear architecture
@@ -212,7 +276,7 @@ No `any`.
 
 ------------------------------------------------------------------------
 
-## 15. FINAL PRINCIPLE
+## 16. FINAL PRINCIPLE
 
 Build systems that are: - predictable - debuggable - replaceable
 
