@@ -62,7 +62,8 @@ export class Hero {
   private updateIntentDisplay(): void {
     const decision = this.state.currentDecision;
     if (decision) {
-      this.intentText.setText(decision.intent);
+      const label = decision.rationaleTag.replace(/_/g, ' ');
+      this.intentText.setText(label);
     }
   }
 

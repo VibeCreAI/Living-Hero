@@ -35,9 +35,12 @@ export interface UnitState {
 
 // ── Hero types ──
 export interface HeroTraits {
-  discipline: number; // 0-1: how closely hero follows commands
-  boldness: number;   // 0-1: aggression level
-  caution: number;    // 0-1: risk avoidance
+  intelligence: number; // 0-1: candidate breadth + target quality
+  discipline: number;   // 0-1: how closely hero follows commands
+  boldness: number;     // 0-1: aggression level
+  caution: number;      // 0-1: risk avoidance
+  empathy: number;      // 0-1: protecting allies vs chasing enemies
+  decisiveness: number; // 0-1: commitment duration (less flip-flopping)
 }
 
 export interface HeroConfig {
@@ -64,11 +67,21 @@ export interface PlayerCommand {
 }
 
 // ── AI types ──
+export type IntentType =
+  | 'hold_position'
+  | 'advance_to_point'
+  | 'protect_target'
+  | 'focus_enemy'
+  | 'retreat_to_point'
+  | 'use_skill';
+
 export interface HeroDecision {
-  intent: string;
+  intent: IntentType;
   targetId?: string;
   moveTo?: Position;
   skillId?: string;
+  priority: 'low' | 'medium' | 'high';
+  rationaleTag: string;
   recheckInSec: number;
 }
 

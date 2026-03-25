@@ -1,6 +1,10 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
 import { HeroSummary, HeroDecision, Position } from '../types';
 
+/**
+ * Simple rule-based fallback brain.
+ * Used when the personality brain or LLM is unavailable.
+ */
 export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
   decide(summary: HeroSummary): HeroDecision {
     const command = summary.currentCommand;
@@ -26,18 +30,24 @@ export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
   private advanceDecision(enemies: { position: Position }[]): HeroDecision {
     const center = this.clusterCenter(enemies);
     return {
-      intent: 'Advancing!',
+      intent: 'advance_to_point',
       moveTo: center,
+      priority: 'medium',
+      rationaleTag: 'advance_toward_enemies',
       recheckInSec: 2,
     };
   }
 
   private protectDecision(allies: { position: Position; hp: number }[]): HeroDecision {
     if (allies.length === 0) {
-      return { intent: 'No allies to protect', recheckInSec: 1 };
+      return {
+        intent: 'hold_position',
+        priority: 'low',
+        rationaleTag: 'no_allies_to_protect',
+        recheckInSec: 1,
+      };
     }
 
-    // Find lowest HP ally
     let weakest = allies[0];
     for (const ally of allies) {
       if (ally.hp < weakest.hp) {
@@ -46,16 +56,20 @@ export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
     }
 
     return {
-      intent: 'Protecting weakest ally',
+      intent: 'protect_target',
       moveTo: { ...weakest.position },
+      priority: 'medium',
+      rationaleTag: 'protect_weakest_ally',
       recheckInSec: 2,
     };
   }
 
   private holdDecision(heroPos: Position): HeroDecision {
     return {
-      intent: 'Holding position',
+      intent: 'hold_position',
       moveTo: { ...heroPos },
+      priority: 'medium',
+      rationaleTag: 'hold_ordered',
       recheckInSec: 3,
     };
   }
@@ -68,15 +82,16 @@ export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
       const target = enemies.find((e) => e.id === targetId);
       if (target) {
         return {
-          intent: `Focusing ${targetId}`,
+          intent: 'focus_enemy',
           targetId,
           moveTo: { ...target.position },
+          priority: 'high',
+          rationaleTag: 'focus_ordered_target',
           recheckInSec: 2,
         };
       }
     }
 
-    // Fallback: focus nearest
     return this.advanceDecision(enemies);
   }
 

@@ -8,7 +8,7 @@ import { MovementSystem } from './MovementSystem';
 import { TargetingSystem } from './TargetingSystem';
 import { CombatSystem } from './CombatSystem';
 import { HeroScheduler } from '../ai/HeroScheduler';
-import { LocalRuleBasedHeroBrain } from '../ai/LocalRuleBasedHeroBrain';
+import { ScoredPersonalityBrain } from '../ai/ScoredPersonalityBrain';
 import { DEFAULT_HEROES } from '../data/heroes';
 
 interface BattleConfig {
@@ -38,7 +38,8 @@ export class BattleLoop {
     this.movementSystem = new MovementSystem();
     this.targetingSystem = new TargetingSystem();
     this.combatSystem = new CombatSystem();
-    this.heroScheduler = new HeroScheduler(new LocalRuleBasedHeroBrain());
+    const heroTraits = DEFAULT_HEROES[0].traits;
+    this.heroScheduler = new HeroScheduler(new ScoredPersonalityBrain(heroTraits));
   }
 
   init(scene: Scene, config: BattleConfig): void {

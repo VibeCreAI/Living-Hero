@@ -17,23 +17,20 @@ export class IntentExecutor {
       hero.setPosition(decision.moveTo);
     }
 
-    // Apply intent to allied units
-    const intent = decision.intent.toLowerCase();
-
-    if (intent.includes('advancing') || intent.includes('focusing')) {
-      // Override targets: all allies focus toward the decision target or nearest enemy
-      if (decision.targetId) {
-        for (const ally of aliveAllies) {
-          ally.state.targetId = decision.targetId;
+    switch (decision.intent) {
+      case 'advance_to_point':
+      case 'focus_enemy':
+        // Override targets: all allies focus toward the decision target or nearest enemy
+        if (decision.targetId) {
+          for (const ally of aliveAllies) {
+            ally.state.targetId = decision.targetId;
+          }
         }
-      }
-      // Units will naturally move toward targets via MovementSystem
-    } else if (intent.includes('protecting')) {
-      // Move allies toward hero position (the weakest ally)
-      if (decision.moveTo) {
+        break;
+
+      case 'protect_target':
+        // Ensure all allies have targets while clustering near protection point
         for (const ally of aliveAllies) {
-          // Keep existing targets but cluster near protection point
-          // Only retarget if no current target
           if (!ally.state.targetId) {
             const nearest = this.findNearest(ally, aliveEnemies);
             if (nearest) {
@@ -41,10 +38,19 @@ export class IntentExecutor {
             }
           }
         }
-      }
-    } else if (intent.includes('holding')) {
-      // Units hold — keep current targets but don't chase far
-      // No special override needed; targeting system handles defaults
+        break;
+
+      case 'retreat_to_point':
+        // Clear targets so units disengage and move toward retreat point
+        for (const ally of aliveAllies) {
+          ally.state.targetId = undefined;
+        }
+        break;
+
+      case 'hold_position':
+      case 'use_skill':
+        // Keep current targets, no special override
+        break;
     }
   }
 
