@@ -91,7 +91,7 @@ export function DebugPanel() {
           marginTop: '4px',
           fontSize: '9px',
           color: '#555',
-          fontFamily: 'monospace',
+          fontFamily: '"NeoDunggeunmoPro", monospace',
         }}
       >
         Press ` for debug
@@ -131,7 +131,7 @@ export function DebugPanel() {
         border: '1px solid #ff660044',
         borderRadius: '3px',
         backgroundColor: '#1a0a00',
-        fontFamily: 'monospace',
+        fontFamily: '"NeoDunggeunmoPro", monospace',
         fontSize: '10px',
         color: '#ff9944',
       }}
@@ -152,7 +152,7 @@ export function DebugPanel() {
             border: 'none',
             color: '#ff6644',
             cursor: 'pointer',
-            fontFamily: 'monospace',
+            fontFamily: '"NeoDunggeunmoPro", monospace',
             fontSize: '10px',
           }}
         >

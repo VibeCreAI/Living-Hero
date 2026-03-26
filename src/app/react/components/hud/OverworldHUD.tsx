@@ -19,7 +19,7 @@ export function OverworldHUD() {
   }, []);
 
   return (
-    <div style={{ padding: '8px', color: '#ccc', fontFamily: 'monospace', fontSize: '12px' }}>
+    <div style={{ padding: '8px', color: '#ccc', fontFamily: '"NeoDunggeunmoPro", monospace', fontSize: '12px' }}>
       <div style={{ marginBottom: '4px', color: '#ffd700', fontSize: '14px' }}>OVERWORLD</div>
       <div>Hero: Commander</div>
       <div>Position: ({Math.round(data.heroPosition.x)}, {Math.round(data.heroPosition.y)})</div>

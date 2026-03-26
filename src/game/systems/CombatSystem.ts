@@ -42,7 +42,14 @@ export class CombatSystem {
 
       if (attacker.canAttack(dt)) {
         const damage = attacker.performAttack();
-        target.takeDamage(damage);
+        const appliedDamage = target.takeDamage(damage);
+        const shouldShowTrainingHit =
+          appliedDamage <= 0 && target.isPassive() && target.state.isInvulnerable === true;
+        const eventDamage = shouldShowTrainingHit ? damage : appliedDamage;
+
+        if (eventDamage <= 0) {
+          continue;
+        }
         events.push({
           timeSec,
           attackerId: attacker.id,
@@ -51,7 +58,7 @@ export class CombatSystem {
           targetId: target.id,
           targetFaction: target.state.faction,
           targetRole: target.state.role,
-          damage,
+          damage: eventDamage,
         });
       }
     }

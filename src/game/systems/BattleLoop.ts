@@ -16,6 +16,7 @@ import { DEFAULT_HEROES } from '../data/heroes';
 interface BattleConfig {
   difficulty: number;
   mode?: BattleMode;
+  layout?: BattleMapLayout;
 }
 
 interface ArmyComposition {
@@ -23,13 +24,21 @@ interface ArmyComposition {
   count: number;
 }
 
-interface PlaygroundTargetConfig {
+export interface PlaygroundTargetConfig {
   name: string;
   role: UnitRole;
   position: Position;
 }
 
-const PLAYGROUND_LAYOUT: Obstacle[] = [
+export interface BattleMapLayout {
+  obstacles?: Obstacle[];
+  heroSpawn?: Position;
+  alliedSpawns?: Position[];
+  enemySpawns?: Position[];
+  playgroundTargets?: PlaygroundTargetConfig[];
+}
+
+const DEFAULT_PLAYGROUND_LAYOUT: Obstacle[] = [
   { id: 'wall-top', label: 'North Wall', x: 410, y: 90, width: 44, height: 220 },
   { id: 'rock-top', label: 'Top Rocks', x: 550, y: 150, width: 110, height: 70 },
   { id: 'center-wall', label: 'Center Wall', x: 500, y: 315, width: 150, height: 42 },
@@ -56,6 +65,7 @@ export class BattleLoop {
   private stopHealthChecks: (() => void) | null = null;
   private mode: BattleMode = 'battle';
   private planningRequested = false;
+  private layout: BattleMapLayout = {};
 
   alliedUnits: Unit[] = [];
   enemyUnits: Unit[] = [];
@@ -98,6 +108,7 @@ export class BattleLoop {
 
   init(scene: Scene, config: BattleConfig): void {
     this.mode = config.mode ?? 'battle';
+    this.layout = config.layout ?? {};
     this.feedbackOverlay = new FeedbackOverlay(scene);
     this.initObstacles(scene);
     this.movementSystem.setObstacles(this.obstacleSystem);
@@ -169,6 +180,10 @@ export class BattleLoop {
       unit.syncVisuals();
     }
 
+    this.feedbackOverlay?.showDamageEvents(
+      damageEvents,
+      [...this.alliedUnits, ...this.enemyUnits]
+    );
     this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
 
     return this.winConditionCheck();
@@ -193,8 +208,13 @@ export class BattleLoop {
   }
 
   private initObstacles(scene: Scene): void {
+    if (this.layout.obstacles && this.layout.obstacles.length > 0) {
+      this.obstacleSystem.init(scene, { layout: this.layout.obstacles });
+      return;
+    }
+
     if (this.mode === 'playground') {
-      this.obstacleSystem.init(scene, { layout: PLAYGROUND_LAYOUT });
+      this.obstacleSystem.init(scene, { layout: DEFAULT_PLAYGROUND_LAYOUT });
       return;
     }
 
@@ -208,9 +228,14 @@ export class BattleLoop {
     ];
 
     let yOffset = 200;
+    let spawnIndex = 0;
     for (const composition of alliedComposition) {
       for (let i = 0; i < composition.count; i++) {
-        const position: Position = { x: 100 + Math.random() * 80, y: yOffset + i * 100 };
+        const fallbackPosition: Position = { x: 100 + Math.random() * 80, y: yOffset + i * 100 };
+        const position =
+          this.layout.alliedSpawns && this.layout.alliedSpawns.length > 0
+            ? this.resolveSpawnPosition(this.layout.alliedSpawns, spawnIndex++)
+            : fallbackPosition;
         const state = createUnitState('allied', composition.role, position);
         this.alliedUnits.push(new Unit(scene, state));
       }
@@ -226,9 +251,14 @@ export class BattleLoop {
     ];
 
     let yOffset = 200;
+    let spawnIndex = 0;
     for (const composition of enemyComposition) {
       for (let i = 0; i < composition.count; i++) {
-        const position: Position = { x: 800 + Math.random() * 80, y: yOffset + i * 90 };
+        const fallbackPosition: Position = { x: 800 + Math.random() * 80, y: yOffset + i * 90 };
+        const position =
+          this.layout.enemySpawns && this.layout.enemySpawns.length > 0
+            ? this.resolveSpawnPosition(this.layout.enemySpawns, spawnIndex++)
+            : fallbackPosition;
         const state = createUnitState('enemy', composition.role, position);
         this.enemyUnits.push(new Unit(scene, state));
       }
@@ -237,7 +267,12 @@ export class BattleLoop {
   }
 
   private spawnPlaygroundTargets(scene: Scene): void {
-    for (const target of PLAYGROUND_TARGETS) {
+    const targets =
+      this.layout.playgroundTargets && this.layout.playgroundTargets.length > 0
+        ? this.layout.playgroundTargets
+        : PLAYGROUND_TARGETS;
+
+    for (const target of targets) {
       const state = createUnitState('enemy', target.role, target.position, {
         displayName: target.name,
         hp: 9999,
@@ -255,7 +290,8 @@ export class BattleLoop {
 
   private spawnHero(scene: Scene): void {
     const heroConfig = DEFAULT_HEROES[0];
-    const heroState = createHeroState(heroConfig, { x: 60, y: 380 });
+    const heroSpawn = this.layout.heroSpawn ?? { x: 60, y: 380 };
+    const heroState = createHeroState(heroConfig, this.clampToArena(heroSpawn));
     this.heroes.push(new Hero(scene, heroState));
   }
 
@@ -314,5 +350,29 @@ ${targets}`;
     this.heroes = [];
     this.mode = 'battle';
     this.planningRequested = false;
+    this.layout = {};
+  }
+
+  private resolveSpawnPosition(spawns: Position[], index: number): Position {
+    const anchor = spawns[index % spawns.length];
+    const cycle = Math.floor(index / spawns.length);
+
+    if (cycle === 0) {
+      return this.clampToArena(anchor);
+    }
+
+    const radius = 16 + cycle * 10;
+    const angle = ((index % 8) / 8) * Math.PI * 2;
+    return this.clampToArena({
+      x: anchor.x + Math.cos(angle) * radius,
+      y: anchor.y + Math.sin(angle) * radius,
+    });
+  }
+
+  private clampToArena(position: Position): Position {
+    return {
+      x: Phaser.Math.Clamp(position.x, 24, 1000),
+      y: Phaser.Math.Clamp(position.y, 24, 744),
+    };
   }
 }

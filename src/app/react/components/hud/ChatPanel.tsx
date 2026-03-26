@@ -72,7 +72,7 @@ export function ChatPanel() {
         border: '1px solid #444',
         borderRadius: '4px',
         backgroundColor: '#1a1a2e',
-        fontFamily: 'monospace',
+        fontFamily: '"NeoDunggeunmoPro", monospace',
         fontSize: '11px',
       }}
     >
@@ -136,7 +136,7 @@ export function ChatPanel() {
             color: '#ccc',
             border: 'none',
             outline: 'none',
-            fontFamily: 'monospace',
+            fontFamily: '"NeoDunggeunmoPro", monospace',
             fontSize: '11px',
           }}
         />
@@ -149,7 +149,7 @@ export function ChatPanel() {
             border: 'none',
             borderLeft: '1px solid #444',
             cursor: 'pointer',
-            fontFamily: 'monospace',
+            fontFamily: '"NeoDunggeunmoPro", monospace',
             fontSize: '11px',
           }}
         >

@@ -4,6 +4,22 @@ import { UNIT_CONFIGS } from '../data/units';
 import { EventBus } from '../EventBus';
 
 let unitIdCounter = 0;
+const HP_BAR_Y_OFFSET = 50;
+const HP_BAR_SCALE = 0.6;
+const HP_BAR_TOTAL_WIDTH = 45;
+const HP_BAR_FILL_INSET_SCENE = 6;
+const HP_BAR_BASE_CAP_SOURCE_WIDTH = 15;
+const HP_BAR_BASE_CENTER_TILE_SOURCE_WIDTH = 64;
+const HP_BAR_BASE_SOURCE_HEIGHT = 19;
+const HP_BAR_FILL_SOURCE_HEIGHT = 3;
+const HP_BAR_FILL_MAX_SCENE_WIDTH = HP_BAR_TOTAL_WIDTH - HP_BAR_FILL_INSET_SCENE * 2;
+const HP_BAR_TEXTURE_BASE = 'ui-smallbar-base';
+const HP_BAR_TEXTURE_FILL = 'ui-smallbar-fill';
+
+const BIGBAR_BASE_LEFT_FRAME = 'ui-bigbar-base-left';
+const BIGBAR_BASE_CENTER_FRAME = 'ui-bigbar-base-center';
+const BIGBAR_BASE_RIGHT_FRAME = 'ui-bigbar-base-right';
+const BIGBAR_FILL_FRAME = 'ui-bigbar-fill-strip';
 
 export function createUnitState(
   faction: UnitFaction,
@@ -37,21 +53,30 @@ export function createUnitState(
 export class Unit {
   state: UnitState;
   sprite: Phaser.GameObjects.Sprite;
-  hpBar: Phaser.GameObjects.Graphics;
+  hpBarBaseLeft: Phaser.GameObjects.Image;
+  hpBarBaseCenter: Phaser.GameObjects.TileSprite;
+  hpBarBaseRight: Phaser.GameObjects.Image;
+  hpBarFill: Phaser.GameObjects.TileSprite;
   labelText?: Phaser.GameObjects.Text;
+  private scene: Scene;
   private attackCooldown: number = 0;
+  private damageFlashToken = 0;
+  private readonly baseScale = 0.5;
+  private persistentTint?: number;
 
   constructor(scene: Scene, unitState: UnitState) {
+    this.scene = scene;
     this.state = unitState;
 
     const prefix = unitState.faction === 'allied' ? 'blue' : 'red';
     const textureKey = `${prefix}-${unitState.role}-idle`;
 
     this.sprite = scene.add.sprite(unitState.position.x, unitState.position.y, textureKey);
-    this.sprite.setScale(0.5);
+    this.sprite.setScale(this.baseScale);
     this.sprite.play(`${prefix}-${unitState.role}-idle-anim`);
     if (unitState.isPassive) {
-      this.sprite.setTint(0xffd27f);
+      this.persistentTint = 0xffd27f;
+      this.applyPersistentTint();
     }
 
     // Flip enemy sprites to face left
@@ -59,7 +84,53 @@ export class Unit {
       this.sprite.setFlipX(true);
     }
 
-    this.hpBar = scene.add.graphics();
+    this.ensureHpBarFrames(scene);
+    scene.textures.get(HP_BAR_TEXTURE_BASE)?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    scene.textures.get(HP_BAR_TEXTURE_FILL)?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+    this.hpBarBaseLeft = scene.add.image(
+      unitState.position.x,
+      unitState.position.y - HP_BAR_Y_OFFSET,
+      HP_BAR_TEXTURE_BASE,
+      BIGBAR_BASE_LEFT_FRAME
+    );
+    this.hpBarBaseLeft.setOrigin(0, 0.5);
+    this.hpBarBaseLeft.setScale(HP_BAR_SCALE);
+    this.hpBarBaseLeft.setDepth(5.9);
+
+    this.hpBarBaseCenter = scene.add.tileSprite(
+      unitState.position.x,
+      unitState.position.y - HP_BAR_Y_OFFSET,
+      HP_BAR_BASE_CENTER_TILE_SOURCE_WIDTH,
+      HP_BAR_BASE_SOURCE_HEIGHT,
+      HP_BAR_TEXTURE_BASE,
+      BIGBAR_BASE_CENTER_FRAME
+    );
+    this.hpBarBaseCenter.setOrigin(0, 0.5);
+    this.hpBarBaseCenter.setScale(HP_BAR_SCALE);
+    this.hpBarBaseCenter.setDepth(5.88);
+
+    this.hpBarBaseRight = scene.add.image(
+      unitState.position.x,
+      unitState.position.y - HP_BAR_Y_OFFSET,
+      HP_BAR_TEXTURE_BASE,
+      BIGBAR_BASE_RIGHT_FRAME
+    );
+    this.hpBarBaseRight.setOrigin(0, 0.5);
+    this.hpBarBaseRight.setScale(HP_BAR_SCALE);
+    this.hpBarBaseRight.setDepth(5.9);
+
+    this.hpBarFill = scene.add.tileSprite(
+      unitState.position.x,
+      unitState.position.y - HP_BAR_Y_OFFSET,
+      HP_BAR_FILL_MAX_SCENE_WIDTH / HP_BAR_SCALE,
+      HP_BAR_FILL_SOURCE_HEIGHT,
+      HP_BAR_TEXTURE_FILL,
+      BIGBAR_FILL_FRAME
+    );
+    this.hpBarFill.setOrigin(0, 0.5);
+    this.hpBarFill.setScale(HP_BAR_SCALE);
+    this.hpBarFill.setDepth(6);
     this.updateHpBar();
 
     if (unitState.displayName) {
@@ -70,7 +141,7 @@ export class Unit {
         {
           fontSize: '10px',
           color: unitState.isPassive ? '#ffd27f' : '#ffffff',
-          fontFamily: 'monospace',
+          fontFamily: '"NeoDunggeunmoPro", monospace',
           backgroundColor: '#00000088',
           padding: { x: 4, y: 2 },
         }
@@ -135,19 +206,53 @@ export class Unit {
     return this.state.attack;
   }
 
-  takeDamage(amount: number): void {
-    if (this.state.state === 'dead') return;
-    if (this.state.isInvulnerable) return;
+  takeDamage(amount: number): number {
+    if (this.state.state === 'dead') return 0;
+    if (this.state.isInvulnerable) return 0;
 
-    this.state.hp = Math.max(0, this.state.hp - amount);
+    const appliedDamage = Math.min(amount, this.state.hp);
+    if (appliedDamage <= 0) {
+      return 0;
+    }
+
+    this.state.hp = Math.max(0, this.state.hp - appliedDamage);
     this.updateHpBar();
 
     if (this.state.hp <= 0) {
       this.state.state = 'dead';
       this.sprite.setAlpha(0.3);
       this.sprite.stop();
-      this.hpBar.clear();
+      this.hpBarBaseLeft.setVisible(false);
+      this.hpBarBaseCenter.setVisible(false);
+      this.hpBarBaseRight.setVisible(false);
+      this.hpBarFill.setVisible(false);
     }
+
+    return appliedDamage;
+  }
+
+  flashDamage(): void {
+    if (!this.sprite.active) {
+      return;
+    }
+
+    const token = ++this.damageFlashToken;
+    this.sprite.setTintFill(0xffffff);
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.setScale(this.baseScale * 1.08);
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: this.baseScale,
+      scaleY: this.baseScale,
+      duration: 120,
+      ease: 'Quad.Out',
+    });
+    this.scene.time.delayedCall(90, () => {
+      if (!this.sprite.active || token !== this.damageFlashToken) {
+        return;
+      }
+      this.applyPersistentTint();
+    });
   }
 
   setAnimState(newState: UnitAnimState): void {
@@ -177,22 +282,39 @@ export class Unit {
   }
 
   private updateHpBar(): void {
-    this.hpBar.clear();
+    const totalSceneWidth = HP_BAR_TOTAL_WIDTH;
+    const capSceneWidth = HP_BAR_BASE_CAP_SOURCE_WIDTH * HP_BAR_SCALE;
+    const centerSceneWidth = totalSceneWidth - capSceneWidth * 2;
+    const leftX = Math.round(this.state.position.x - totalSceneWidth / 2);
+    const baseY = Math.round(this.state.position.y - HP_BAR_Y_OFFSET);
 
-    const barWidth = 40;
-    const barHeight = 5;
-    const x = this.state.position.x - barWidth / 2;
-    const y = this.state.position.y - 50;
+    const visible = this.isAlive();
+    this.hpBarBaseLeft.setVisible(visible);
+    this.hpBarBaseCenter.setVisible(visible);
+    this.hpBarBaseRight.setVisible(visible);
+    this.hpBarFill.setVisible(visible);
+    if (!visible) {
+      return;
+    }
 
-    // Background
-    this.hpBar.fillStyle(0x333333);
-    this.hpBar.fillRect(x, y, barWidth, barHeight);
+    this.hpBarBaseLeft.setPosition(leftX, baseY);
+    this.hpBarBaseCenter.setPosition(leftX + capSceneWidth, baseY);
+    this.hpBarBaseCenter.setSize(centerSceneWidth / HP_BAR_SCALE, HP_BAR_BASE_SOURCE_HEIGHT);
+    this.hpBarBaseRight.setPosition(leftX + capSceneWidth + centerSceneWidth, baseY);
 
-    // Fill
-    const ratio = this.state.hp / this.state.maxHp;
-    const color = ratio > 0.5 ? 0x00cc00 : ratio > 0.25 ? 0xcccc00 : 0xcc0000;
-    this.hpBar.fillStyle(color);
-    this.hpBar.fillRect(x, y, barWidth * ratio, barHeight);
+    const ratio = Phaser.Math.Clamp(this.state.hp / this.state.maxHp, 0, 1);
+    if (ratio <= 0) {
+      this.hpBarFill.setVisible(false);
+      return;
+    }
+
+    const fillWidthScene = Math.max(1, HP_BAR_FILL_MAX_SCENE_WIDTH * ratio);
+    const fillWidthSource = fillWidthScene / HP_BAR_SCALE;
+    const fillX = leftX + HP_BAR_FILL_INSET_SCENE;
+
+    this.hpBarFill.setVisible(true);
+    this.hpBarFill.setPosition(fillX, baseY);
+    this.hpBarFill.setSize(fillWidthSource, HP_BAR_FILL_SOURCE_HEIGHT);
   }
 
   syncVisuals(): void {
@@ -203,7 +325,35 @@ export class Unit {
 
   destroy(): void {
     this.sprite.destroy();
-    this.hpBar.destroy();
+    this.hpBarBaseLeft.destroy();
+    this.hpBarBaseCenter.destroy();
+    this.hpBarBaseRight.destroy();
+    this.hpBarFill.destroy();
     this.labelText?.destroy();
+  }
+
+  private applyPersistentTint(): void {
+    this.sprite.clearTint();
+    if (this.persistentTint !== undefined) {
+      this.sprite.setTint(this.persistentTint);
+    }
+  }
+
+  private ensureHpBarFrames(scene: Scene): void {
+    const baseTexture = scene.textures.get(HP_BAR_TEXTURE_BASE);
+    if (!baseTexture.has(BIGBAR_BASE_LEFT_FRAME)) {
+      baseTexture.add(BIGBAR_BASE_LEFT_FRAME, 0, 49, 22, 15, 19);
+    }
+    if (!baseTexture.has(BIGBAR_BASE_CENTER_FRAME)) {
+      baseTexture.add(BIGBAR_BASE_CENTER_FRAME, 0, 128, 22, 64, 19);
+    }
+    if (!baseTexture.has(BIGBAR_BASE_RIGHT_FRAME)) {
+      baseTexture.add(BIGBAR_BASE_RIGHT_FRAME, 0, 256, 22, 15, 19);
+    }
+
+    const fillTexture = scene.textures.get(HP_BAR_TEXTURE_FILL);
+    if (!fillTexture.has(BIGBAR_FILL_FRAME)) {
+      fillTexture.add(BIGBAR_FILL_FRAME, 0, 0, 30, 64, 3);
+    }
   }
 }

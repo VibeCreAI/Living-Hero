@@ -37,7 +37,7 @@ export function SelectionPanel() {
         border: '1px solid #444',
         borderRadius: '3px',
         backgroundColor: '#1a1a2e',
-        fontFamily: 'monospace',
+        fontFamily: '"NeoDunggeunmoPro", monospace',
         fontSize: '11px',
         color: '#ccc',
       }}
@@ -54,7 +54,7 @@ export function SelectionPanel() {
           border: '1px solid #555',
           borderRadius: '2px',
           cursor: 'pointer',
-          fontFamily: 'monospace',
+          fontFamily: '"NeoDunggeunmoPro", monospace',
           fontSize: '10px',
         }}
       >

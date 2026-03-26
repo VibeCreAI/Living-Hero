@@ -52,7 +52,7 @@ export function BattleHUD() {
   };
 
   return (
-    <div style={{ padding: '8px', color: '#ccc', fontFamily: 'monospace', fontSize: '12px' }}>
+    <div style={{ padding: '8px', color: '#ccc', fontFamily: '"NeoDunggeunmoPro", monospace', fontSize: '12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
         <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '14px' }}>
           {isPlayground ? 'PLAYGROUND' : 'BATTLE'}
@@ -91,7 +91,7 @@ export function BattleHUD() {
             onClick={startBattle}
             style={{
               padding: '4px 10px',
-              fontFamily: 'monospace',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
               fontSize: '11px',
               cursor: 'pointer',
               backgroundColor: '#ffd700',
@@ -123,7 +123,7 @@ export function BattleHUD() {
             onClick={leavePlayground}
             style={{
               padding: '4px 8px',
-              fontFamily: 'monospace',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
               fontSize: '11px',
               cursor: 'pointer',
               backgroundColor: '#2b1b12',

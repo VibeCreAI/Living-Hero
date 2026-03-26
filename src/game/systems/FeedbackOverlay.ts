@@ -31,11 +31,32 @@ export class FeedbackOverlay {
   private graphics: Phaser.GameObjects.Graphics;
   private targetRing: Phaser.GameObjects.Arc | null = null;
   private scene: Scene;
+  private floatingTexts = new Set<Phaser.GameObjects.Text>();
 
   constructor(scene: Scene) {
     this.scene = scene;
     this.graphics = scene.add.graphics();
     this.graphics.setDepth(5);
+  }
+
+  showDamageEvents(
+    events: Array<{ targetId: string; damage: number; targetFaction: 'allied' | 'enemy' }>,
+    units: Unit[]
+  ): void {
+    if (events.length === 0) {
+      return;
+    }
+
+    const unitsById = new Map(units.map((unit) => [unit.id, unit]));
+    for (const event of events) {
+      const target = unitsById.get(event.targetId);
+      if (!target) {
+        continue;
+      }
+
+      target.flashDamage();
+      this.spawnDamageNumber(target, event.damage, event.targetFaction);
+    }
   }
 
   update(
@@ -100,5 +121,44 @@ export class FeedbackOverlay {
   destroy(): void {
     this.graphics.destroy();
     this.targetRing?.destroy();
+    for (const text of this.floatingTexts) {
+      text.destroy();
+    }
+    this.floatingTexts.clear();
+  }
+
+  private spawnDamageNumber(
+    target: Unit,
+    damage: number,
+    targetFaction: 'allied' | 'enemy'
+  ): void {
+    const color = targetFaction === 'allied' ? '#ff8f80' : '#ffd166';
+    const startX = target.state.position.x + Phaser.Math.Between(-8, 8);
+    const startY = target.state.position.y - 62;
+    const text = this.scene.add.text(startX, startY, `-${damage}`, {
+      fontSize: '18px',
+      fontFamily: '"NeoDunggeunmoPro", monospace',
+      fontStyle: 'bold',
+      color,
+      stroke: '#1a1200',
+      strokeThickness: 4,
+    });
+    text.setOrigin(0.5);
+    text.setDepth(8);
+    this.floatingTexts.add(text);
+
+    this.scene.tweens.add({
+      targets: text,
+      y: startY - 28,
+      alpha: 0,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 650,
+      ease: 'Cubic.Out',
+      onComplete: () => {
+        this.floatingTexts.delete(text);
+        text.destroy();
+      },
+    });
   }
 }

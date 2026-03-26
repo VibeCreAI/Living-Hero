@@ -11,7 +11,7 @@ export function UnitPanel({ unit }: UnitPanelProps) {
   const hpColor = hpPercent > 50 ? '#00cc00' : hpPercent > 25 ? '#cccc00' : '#cc0000';
 
   return (
-    <div style={{ padding: '8px', color: '#ccc', fontFamily: 'monospace', fontSize: '11px', borderTop: '1px solid #444' }}>
+    <div style={{ padding: '8px', color: '#ccc', fontFamily: '"NeoDunggeunmoPro", monospace', fontSize: '11px', borderTop: '1px solid #444' }}>
       <div style={{ color: '#aaa', fontSize: '10px', marginBottom: '2px' }}>SELECTED UNIT</div>
       <div>{unit.role.toUpperCase()} ({unit.faction})</div>
       <div>

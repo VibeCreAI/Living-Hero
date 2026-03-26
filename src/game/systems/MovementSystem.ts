@@ -16,6 +16,11 @@ const TARGET_SHIFT_REPATH = 28;
 const WAYPOINT_REACHED_DISTANCE = 10;
 const STUCK_REPATH_DELAY = 0.35;
 const ENGAGE_LINE_OF_SIGHT_PADDING = 6;
+const ORDER_SLOT_PADDING = 10;
+const ORDER_SLOT_COUNT = 8;
+const MAP_WIDTH = 1024;
+const MAP_HEIGHT = 768;
+const MAP_PADDING = 20;
 
 export class MovementSystem {
   private obstacles: ObstacleSystem | null = null;
@@ -106,28 +111,29 @@ export class MovementSystem {
     }
 
     const state = this.getNavigationState(unit.id, dt);
+    const navigableDestination = this.resolveNavigableDestination(destination);
 
-    if (this.obstacles.hasLineOfSight(unit.state.position, destination)) {
+    if (this.obstacles.hasLineOfSight(unit.state.position, navigableDestination)) {
       state.path = [];
       state.waypointIndex = 0;
       state.destinationKey = destinationKey;
-      state.lastDestination = { ...destination };
+      state.lastDestination = { ...navigableDestination };
       state.stuckTime = 0;
-      this.stepToward(unit, destination, dt);
+      this.stepToward(unit, navigableDestination, dt);
       return;
     }
 
-    if (this.shouldRepath(state, destinationKey, destination)) {
-      const path = this.obstacles.findPath(unit.state.position, destination);
+    if (this.shouldRepath(state, destinationKey, navigableDestination)) {
+      const path = this.obstacles.findPath(unit.state.position, navigableDestination);
       state.path = path ?? [];
       state.waypointIndex = 0;
       state.destinationKey = destinationKey;
-      state.lastDestination = { ...destination };
+      state.lastDestination = { ...navigableDestination };
       state.repathCooldown = REPATH_INTERVAL;
       state.stuckTime = 0;
     }
 
-    const moveTarget = this.resolveMoveTarget(unit, destination, state);
+    const moveTarget = this.resolveMoveTarget(unit, navigableDestination, state);
     const before = { ...unit.state.position };
     const moved = this.stepToward(unit, moveTarget, dt);
     const progress = Math.hypot(
@@ -147,7 +153,7 @@ export class MovementSystem {
       state.waypointIndex = 0;
       state.repathCooldown = 0;
       state.destinationKey = destinationKey;
-      state.lastDestination = { ...destination };
+      state.lastDestination = { ...navigableDestination };
     }
   }
 
@@ -299,11 +305,22 @@ export class MovementSystem {
     const baseRadius = unit.state.role === 'warrior' ? 24 : 46;
     const variance = (seed % 3) * 8;
     const radius = Math.min((unit.state.orderRadius ?? 80) * 0.55, baseRadius + variance);
+    const angleStep = (Math.PI * 2) / ORDER_SLOT_COUNT;
 
-    return {
-      x: anchor.x + Math.cos(angle) * radius,
-      y: anchor.y + Math.sin(angle) * radius,
-    };
+    for (let i = 0; i < ORDER_SLOT_COUNT; i++) {
+      const slot = this.clampToMap({
+        x: anchor.x + Math.cos(angle + i * angleStep) * radius,
+        y: anchor.y + Math.sin(angle + i * angleStep) * radius,
+      });
+
+      if (this.obstacles && this.obstacles.isBlocked(slot, ORDER_SLOT_PADDING)) {
+        continue;
+      }
+
+      return slot;
+    }
+
+    return this.resolveNavigableDestination(anchor);
   }
 
   private buildOrderNavigationKey(unit: Unit, destination: Position): string {
@@ -353,5 +370,21 @@ export class MovementSystem {
       hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
     }
     return hash;
+  }
+
+  private resolveNavigableDestination(destination: Position): Position {
+    const clamped = this.clampToMap(destination);
+    if (!this.obstacles) {
+      return clamped;
+    }
+
+    return this.obstacles.pushOut(clamped);
+  }
+
+  private clampToMap(position: Position): Position {
+    return {
+      x: Math.max(MAP_PADDING, Math.min(MAP_WIDTH - MAP_PADDING, position.x)),
+      y: Math.max(MAP_PADDING, Math.min(MAP_HEIGHT - MAP_PADDING, position.y)),
+    };
   }
 }

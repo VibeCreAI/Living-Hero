@@ -42,7 +42,7 @@ export function ModelDownloadOverlay() {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10000,
-      fontFamily: 'monospace',
+      fontFamily: '"NeoDunggeunmoPro", monospace',
       color: '#ffffff',
     }}>
       <h1 style={{ fontSize: '32px', marginBottom: '24px', color: '#ffd700' }}>

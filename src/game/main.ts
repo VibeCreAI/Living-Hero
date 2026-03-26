@@ -7,6 +7,9 @@ const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
   width: 1024,
   height: 768,
+  pixelArt: true,
+  antialias: false,
+  roundPixels: true,
   parent: 'game-container',
   backgroundColor: '#1a4a1a',
   scene: [

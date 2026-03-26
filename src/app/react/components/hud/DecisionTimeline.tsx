@@ -99,7 +99,7 @@ export function DecisionTimeline() {
           overflowY: 'auto',
           padding: '4px 6px',
           fontSize: '10px',
-          fontFamily: 'monospace',
+          fontFamily: '"NeoDunggeunmoPro", monospace',
         }}
       >
         {entries.map((entry, index) => (
