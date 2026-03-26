@@ -12,6 +12,7 @@ export class BootScene extends Scene {
     this.load.spritesheet('blue-archer-idle', 'assets/Units/Blue Units/Archer/Archer_Idle.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('blue-archer-run', 'assets/Units/Blue Units/Archer/Archer_Run.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('blue-archer-attack', 'assets/Units/Blue Units/Archer/Archer_Shoot.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.image('blue-archer-arrow', 'assets/Units/Blue Units/Archer/Arrow.png');
 
     this.load.spritesheet('red-warrior-idle', 'assets/Units/Red Units/Warrior/Warrior_Idle.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('red-warrior-run', 'assets/Units/Red Units/Warrior/Warrior_Run.png', { frameWidth: 192, frameHeight: 192 });
@@ -19,6 +20,7 @@ export class BootScene extends Scene {
     this.load.spritesheet('red-archer-idle', 'assets/Units/Red Units/Archer/Archer_Idle.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('red-archer-run', 'assets/Units/Red Units/Archer/Archer_Run.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('red-archer-attack', 'assets/Units/Red Units/Archer/Archer_Shoot.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.image('red-archer-arrow', 'assets/Units/Red Units/Archer/Arrow.png');
 
     this.load.image('castle-blue', 'assets/Buildings/Blue Buildings/Castle.png');
     this.load.image('castle-red', 'assets/Buildings/Red Buildings/Castle.png');

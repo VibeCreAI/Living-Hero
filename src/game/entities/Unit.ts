@@ -63,6 +63,7 @@ export class Unit {
   private damageFlashToken = 0;
   private readonly baseScale = 0.5;
   private persistentTint?: number;
+  private facingFlipX: boolean;
 
   constructor(scene: Scene, unitState: UnitState) {
     this.scene = scene;
@@ -74,14 +75,11 @@ export class Unit {
     this.sprite = scene.add.sprite(unitState.position.x, unitState.position.y, textureKey);
     this.sprite.setScale(this.baseScale);
     this.sprite.play(`${prefix}-${unitState.role}-idle-anim`);
+    this.facingFlipX = unitState.faction === 'enemy';
+    this.sprite.setFlipX(this.facingFlipX);
     if (unitState.isPassive) {
       this.persistentTint = 0xffd27f;
       this.applyPersistentTint();
-    }
-
-    // Flip enemy sprites to face left
-    if (unitState.faction === 'enemy') {
-      this.sprite.setFlipX(true);
     }
 
     this.ensureHpBarFrames(scene);
@@ -184,6 +182,8 @@ export class Unit {
 
     if (dist < 2) return;
 
+    this.updateFacingFromDelta(dx);
+
     const nx = dx / dist;
     const ny = dy / dist;
     const step = this.state.moveSpeed * dt;
@@ -193,6 +193,28 @@ export class Unit {
 
     this.sprite.setPosition(this.state.position.x, this.state.position.y);
     this.setAnimState('moving');
+  }
+
+  updateFacingFromDelta(deltaX: number): void {
+    if (this.state.state === 'dead') {
+      return;
+    }
+
+    if (Math.abs(deltaX) < 0.5) {
+      return;
+    }
+
+    const shouldFlipX = deltaX < 0;
+    if (shouldFlipX === this.facingFlipX) {
+      return;
+    }
+
+    this.facingFlipX = shouldFlipX;
+    this.sprite.setFlipX(shouldFlipX);
+  }
+
+  faceToward(target: Position): void {
+    this.updateFacingFromDelta(target.x - this.state.position.x);
   }
 
   canAttack(dt: number): boolean {

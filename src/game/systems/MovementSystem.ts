@@ -208,6 +208,8 @@ export class MovementSystem {
       return false;
     }
 
+    unit.updateFacingFromDelta(dx);
+
     const step = Math.min(unit.state.moveSpeed * dt, distance);
     const nextPosition = {
       x: unit.state.position.x + (dx / distance) * step,

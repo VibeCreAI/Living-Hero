@@ -73,7 +73,13 @@ export function ChatPanel() {
         borderRadius: '4px',
         backgroundColor: '#1a1a2e',
         fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontSize: '11px',
+        fontSize: '12px',
+        fontWeight: 400,
+        lineHeight: 1.28,
+        letterSpacing: '0px',
+        textRendering: 'optimizeSpeed',
+        WebkitFontSmoothing: 'none',
+        textShadow: '0 1px 0 rgba(0,0,0,0.75)',
       }}
     >
       {/* Header */}
@@ -82,7 +88,7 @@ export function ChatPanel() {
           padding: '4px 8px',
           borderBottom: '1px solid #444',
           color: '#ffd700',
-          fontSize: '12px',
+          fontSize: '13px',
         }}
       >
         Commander Chat
@@ -98,7 +104,7 @@ export function ChatPanel() {
         }}
       >
         {messages.length === 0 && (
-          <div style={{ color: '#666', fontStyle: 'italic' }}>
+          <div style={{ color: '#666' }}>
             Type a message to talk to your hero...
           </div>
         )}
@@ -107,7 +113,7 @@ export function ChatPanel() {
             <span
               style={{
                 color: msg.sender === 'player' ? '#4488ff' : '#ffd700',
-                fontWeight: 'bold',
+                fontWeight: 400,
               }}
             >
               [{msg.name}]
@@ -137,7 +143,7 @@ export function ChatPanel() {
             border: 'none',
             outline: 'none',
             fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '11px',
+            fontSize: '12px',
           }}
         />
         <button
@@ -150,7 +156,7 @@ export function ChatPanel() {
             borderLeft: '1px solid #444',
             cursor: 'pointer',
             fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '11px',
+            fontSize: '12px',
           }}
         >
           Send

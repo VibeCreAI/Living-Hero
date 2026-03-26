@@ -31,6 +31,8 @@ export class CombatSystem {
       const target = defenders.find((defender) => defender.id === attacker.state.targetId);
       if (!target || !target.isAlive()) continue;
 
+      attacker.faceToward(target.state.position);
+
       const distance = attacker.distanceTo(target);
       if (distance > attacker.state.attackRange) continue;
       if (

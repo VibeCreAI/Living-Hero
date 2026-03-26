@@ -35,36 +35,41 @@ export function addRibbonLabel(
   const ribbonScale = options.ribbonScale ?? 0.72;
   const fontSizePx = options.fontSizePx ?? 8;
   const textScale = options.textScale ?? 1.8;
+  const finalFontSizePx = Math.max(8, Math.round(fontSizePx * textScale));
+  const strokeThickness = Math.max(2, Math.round(finalFontSizePx / 7));
+  const x = Math.round(options.x);
+  const y = Math.round(options.y);
   const frameBase = FRAME_BASE_BY_TONE[options.tone];
 
   scene.textures.get('ui-ribbons-small')?.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
-  const labelText = scene.add.text(options.x, options.y, options.text, {
+  const labelText = scene.add.text(x, y, options.text, {
     fontFamily: '"NeoDunggeunmoPro", monospace',
-    fontSize: `${fontSizePx}px`,
+    fontSize: `${finalFontSizePx}px`,
     fontStyle: 'bold',
     color: TEXT_COLOR_BY_TONE[options.tone],
     stroke: '#1b1620',
-    strokeThickness: 2,
+    strokeThickness,
     shadow: {
       color: '#000000',
       offsetX: 0,
-      offsetY: 1,
+      offsetY: 0,
       blur: 0,
-      fill: true,
+      fill: false,
     },
   });
   labelText.setOrigin(0.5);
-  labelText.setScale(textScale);
-  labelText.setResolution(2);
+  labelText.setScale(1);
+  labelText.setResolution(3);
+  labelText.setDepth(depth + 0.2);
 
   const capSize = 64 * ribbonScale;
   const targetWidth = labelText.displayWidth + 26;
   const centerWidth = Math.max(10, targetWidth - capSize * 2 + 6);
 
   const center = scene.add.tileSprite(
-    options.x,
-    options.y,
+    x,
+    y,
     centerWidth,
     capSize,
     'ui-ribbons-small',
@@ -73,8 +78,8 @@ export function addRibbonLabel(
   center.setDepth(depth);
 
   const leftCap = scene.add.image(
-    options.x - centerWidth / 2 - capSize / 2 + 2,
-    options.y,
+    Math.round(x - centerWidth / 2 - capSize / 2 + 2),
+    y,
     'ui-ribbons-small',
     frameBase
   );
@@ -82,14 +87,13 @@ export function addRibbonLabel(
   leftCap.setDepth(depth + 0.01);
 
   const rightCap = scene.add.image(
-    options.x + centerWidth / 2 + capSize / 2 - 2,
-    options.y,
+    Math.round(x + centerWidth / 2 + capSize / 2 - 2),
+    y,
     'ui-ribbons-small',
     frameBase + 4
   );
   rightCap.setDisplaySize(capSize, capSize);
   rightCap.setDepth(depth + 0.01);
 
-  labelText.setDepth(depth + 0.2);
   return labelText;
 }

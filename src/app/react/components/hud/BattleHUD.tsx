@@ -52,9 +52,22 @@ export function BattleHUD() {
   };
 
   return (
-    <div style={{ padding: '8px', color: '#ccc', fontFamily: '"NeoDunggeunmoPro", monospace', fontSize: '12px' }}>
+    <div
+      style={{
+        padding: '8px',
+        color: '#ccc',
+        fontFamily: '"NeoDunggeunmoPro", monospace',
+        fontSize: '13px',
+        fontWeight: 400,
+        lineHeight: 1.28,
+        letterSpacing: '0px',
+        textRendering: 'optimizeSpeed',
+        WebkitFontSmoothing: 'none',
+        textShadow: '0 1px 0 rgba(0,0,0,0.75)',
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '14px' }}>
+        <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '15px' }}>
           {isPlayground ? 'PLAYGROUND' : 'BATTLE'}
         </span>
         <LLMStatus />
@@ -92,7 +105,7 @@ export function BattleHUD() {
             style={{
               padding: '4px 10px',
               fontFamily: '"NeoDunggeunmoPro", monospace',
-              fontSize: '11px',
+              fontSize: '12px',
               cursor: 'pointer',
               backgroundColor: '#ffd700',
               color: '#000',
@@ -124,7 +137,7 @@ export function BattleHUD() {
             style={{
               padding: '4px 8px',
               fontFamily: '"NeoDunggeunmoPro", monospace',
-              fontSize: '11px',
+              fontSize: '12px',
               cursor: 'pointer',
               backgroundColor: '#2b1b12',
               color: '#ffcc66',
@@ -160,7 +173,7 @@ export function BattleHUD() {
           backgroundColor: hasSplitPlan ? '#171b12' : '#141414',
         }}
       >
-        <div style={{ color: '#9a9a9a', marginBottom: '4px', fontSize: '10px' }}>
+        <div style={{ color: '#9a9a9a', marginBottom: '4px', fontSize: '11px' }}>
           {hasSplitPlan ? 'Commander Plan' : 'Army Plan'}
         </div>
         <PlanRow label="Army" value={armyPlan} color="#ffd700" />

@@ -80,6 +80,13 @@ export function DecisionTimeline() {
         border: '1px solid #333',
         borderRadius: '3px',
         backgroundColor: '#111',
+        fontFamily: '"NeoDunggeunmoPro", monospace',
+        fontWeight: 400,
+        lineHeight: 1.28,
+        letterSpacing: '0px',
+        textRendering: 'optimizeSpeed',
+        WebkitFontSmoothing: 'none',
+        textShadow: '0 1px 0 rgba(0,0,0,0.75)',
       }}
     >
       <div
@@ -87,7 +94,7 @@ export function DecisionTimeline() {
           padding: '3px 6px',
           borderBottom: '1px solid #333',
           color: '#888',
-          fontSize: '10px',
+          fontSize: '11px',
         }}
       >
         Decision Log
@@ -98,8 +105,7 @@ export function DecisionTimeline() {
           maxHeight: '180px',
           overflowY: 'auto',
           padding: '4px 6px',
-          fontSize: '10px',
-          fontFamily: '"NeoDunggeunmoPro", monospace',
+          fontSize: '11px',
         }}
       >
         {entries.map((entry, index) => (
