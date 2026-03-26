@@ -1,4 +1,5 @@
 import { HeroSummary, IntentType, Position, UnitState } from '../types';
+import { chooseTacticalAnchor } from './cover';
 
 export interface Candidate {
   intent: IntentType;
@@ -10,18 +11,20 @@ export interface Candidate {
 /** Generate all candidate intents from the current battlefield state. */
 export function generateCandidates(summary: HeroSummary): Candidate[] {
   const candidates: Candidate[] = [];
+  const alliesCenter = clusterCenter(summary.nearbyAllies);
 
   // Always available: hold position
   candidates.push({
     intent: 'hold_position',
-    moveTo: { ...summary.heroState.position },
+    moveTo: chooseTacticalAnchor(summary, 'hold', summary.heroState.position),
   });
 
   // Advance toward enemy cluster
   if (summary.nearbyEnemies.length > 0) {
+    const forwardPoint = getForwardPoint(summary);
     candidates.push({
       intent: 'advance_to_point',
-      moveTo: getForwardPoint(summary),
+      moveTo: chooseTacticalAnchor(summary, 'advance', forwardPoint),
     });
   }
 
@@ -32,7 +35,7 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
       candidates.push({
         intent: 'protect_target',
         targetId: threatened.id,
-        moveTo: { ...threatened.position },
+        moveTo: chooseTacticalAnchor(summary, 'protect', threatened.position),
       });
     }
   }
@@ -50,10 +53,18 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
   }
 
   // Retreat to safe point
+  const safePoint = getSafePoint(summary);
   candidates.push({
     intent: 'retreat_to_point',
-    moveTo: getSafePoint(summary),
+    moveTo: chooseTacticalAnchor(summary, 'retreat', safePoint),
   });
+
+  if (summary.obstacles.length > 0 && alliesCenter) {
+    candidates.push({
+      intent: 'hold_position',
+      moveTo: chooseTacticalAnchor(summary, 'hold', alliesCenter),
+    });
+  }
 
   return candidates;
 }

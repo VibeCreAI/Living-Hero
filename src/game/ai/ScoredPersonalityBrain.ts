@@ -23,7 +23,7 @@ function buildRationale(candidate: Candidate, summary: HeroSummary): string {
       return allyHpPct < AI_CONFIG.retreatHpThreshold ? 'retreat_low_hp' : 'retreat_reposition';
     }
     case 'hold_position':
-      return summary.currentCommand?.type === 'hold' ? 'hold_ordered' : 'hold_default';
+      return 'hold_position';
     case 'use_skill':
       return 'use_skill_tactical';
   }
@@ -117,7 +117,7 @@ export class ScoredPersonalityBrain implements IHeroDecisionProvider {
         : 1;
       return allyHpPct < AI_CONFIG.retreatHpThreshold ? 'high' : 'low';
     }
-    if (candidate.intent === 'focus_enemy' && summary.currentCommand?.type === 'focus') {
+    if (candidate.intent === 'focus_enemy') {
       return 'high';
     }
     return 'medium';

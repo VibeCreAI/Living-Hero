@@ -31,7 +31,11 @@ export class OverworldScene extends Scene {
 
     // Draw encounter nodes
     for (const node of OVERWORLD_NODES) {
-      const castle = this.add.image(node.position.x, node.position.y, 'castle-red');
+      const castle = this.add.image(
+        node.position.x,
+        node.position.y,
+        node.mode === 'playground' ? 'castle-blue' : 'castle-red'
+      );
       castle.setScale(0.4);
       this.nodeSprites.set(node.id, castle);
 
@@ -45,10 +49,12 @@ export class OverworldScene extends Scene {
       }).setOrigin(0.5);
 
       // Difficulty indicator
-      const stars = '\u2605'.repeat(Math.ceil(node.difficulty));
-      this.add.text(node.position.x, node.position.y + 66, stars, {
+      const difficultyText = node.mode === 'playground'
+        ? 'Sandbox'
+        : '\u2605'.repeat(Math.ceil(node.difficulty));
+      this.add.text(node.position.x, node.position.y + 66, difficultyText, {
         fontSize: '12px',
-        color: '#ffcc00',
+        color: node.mode === 'playground' ? '#66ccff' : '#ffcc00',
         fontFamily: 'monospace',
       }).setOrigin(0.5);
     }
@@ -78,7 +84,7 @@ export class OverworldScene extends Scene {
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     // Instructions
-    this.add.text(512, 740, 'Arrow keys to move | SPACE to enter battle', {
+    this.add.text(512, 740, 'Arrow keys to move | SPACE to enter node', {
       fontSize: '11px',
       color: '#aaaaaa',
       fontFamily: 'monospace',
@@ -128,13 +134,15 @@ export class OverworldScene extends Scene {
     }
 
     if (this.nearNode) {
-      this.promptText.setText(`Press SPACE to enter: ${this.nearNode.label}`);
+      const verb = this.nearNode.mode === 'playground' ? 'enter playground' : 'enter battle';
+      this.promptText.setText(`Press SPACE to ${verb}: ${this.nearNode.label}`);
       this.promptText.setVisible(true);
 
       if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
         this.scene.start('BattleScene', {
           nodeId: this.nearNode.id,
           difficulty: this.nearNode.difficulty,
+          mode: this.nearNode.mode ?? 'battle',
         });
       }
     } else {

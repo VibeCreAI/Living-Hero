@@ -1,3 +1,13 @@
+/** Ollama LLM configuration */
+export const OLLAMA_CONFIG = {
+  baseUrl: 'http://localhost:11434',
+  model: 'alibayram/smollm3',
+  maxTokens: 100,
+  temperature: 0.7,
+  timeoutMs: 3000,
+  healthCheckIntervalMs: 10000,
+};
+
 /** AI tuning constants. Avoid magic numbers in logic files. */
 export const AI_CONFIG = {
   /** Score delta required to switch away from current intent */

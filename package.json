@@ -20,7 +20,7 @@
         "strategy-game"
     ],
     "scripts": {
-        "dev": "node log.js dev & vite --config vite/config.dev.mjs",
+        "dev": "vite --config vite/config.dev.mjs",
         "build": "node log.js build & vite build --config vite/config.prod.mjs",
         "dev-nolog": "vite --config vite/config.dev.mjs",
         "build-nolog": "vite build --config vite/config.prod.mjs",
@@ -31,6 +31,7 @@
     },
     "dependencies": {
         "@tauri-apps/api": "^2.10.1",
+        "navmesh": "^2.3.1",
         "phaser": "^3.90.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"

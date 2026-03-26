@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
-import { HeroState, HeroConfig, PlayerCommand, HeroDecision, Position } from '../types';
+import { HeroState, HeroConfig, HeroDecision, Position } from '../types';
+import { EventBus } from '../EventBus';
 
 export function createHeroState(config: HeroConfig, position: Position): HeroState {
   return {
@@ -28,6 +29,10 @@ export class Hero {
     );
     this.marker.setStrokeStyle(2, 0x000000);
     this.marker.setDepth(10);
+    this.marker.setInteractive({ useHandCursor: true });
+    this.marker.on('pointerdown', () => {
+      EventBus.emit('hero-selected', this.state);
+    });
 
     // Name label
     this.nameText = scene.add.text(
@@ -50,8 +55,8 @@ export class Hero {
     this.intentText.setDepth(10);
   }
 
-  setCommand(cmd: PlayerCommand): void {
-    this.state.currentCommand = cmd;
+  setDirective(directive: string): void {
+    this.state.currentDirective = directive;
   }
 
   setDecision(decision: HeroDecision): void {

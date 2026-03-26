@@ -1,16 +1,18 @@
 import { Scene } from 'phaser';
 import { UnitState, UnitFaction, UnitRole, UnitAnimState, Position } from '../types';
 import { UNIT_CONFIGS } from '../data/units';
+import { EventBus } from '../EventBus';
 
 let unitIdCounter = 0;
 
 export function createUnitState(
   faction: UnitFaction,
   role: UnitRole,
-  position: Position
+  position: Position,
+  overrides: Partial<UnitState> = {}
 ): UnitState {
   const config = UNIT_CONFIGS[role];
-  return {
+  const baseState: UnitState = {
     id: `unit-${faction}-${role}-${unitIdCounter++}`,
     faction,
     role,
@@ -23,12 +25,20 @@ export function createUnitState(
     moveSpeed: config.moveSpeed,
     state: 'idle',
   };
+
+  return {
+    ...baseState,
+    ...overrides,
+    position: { ...position, ...(overrides.position ?? {}) },
+    state: 'idle',
+  };
 }
 
 export class Unit {
   state: UnitState;
   sprite: Phaser.GameObjects.Sprite;
   hpBar: Phaser.GameObjects.Graphics;
+  labelText?: Phaser.GameObjects.Text;
   private attackCooldown: number = 0;
 
   constructor(scene: Scene, unitState: UnitState) {
@@ -40,6 +50,9 @@ export class Unit {
     this.sprite = scene.add.sprite(unitState.position.x, unitState.position.y, textureKey);
     this.sprite.setScale(0.5);
     this.sprite.play(`${prefix}-${unitState.role}-idle-anim`);
+    if (unitState.isPassive) {
+      this.sprite.setTint(0xffd27f);
+    }
 
     // Flip enemy sprites to face left
     if (unitState.faction === 'enemy') {
@@ -48,6 +61,29 @@ export class Unit {
 
     this.hpBar = scene.add.graphics();
     this.updateHpBar();
+
+    if (unitState.displayName) {
+      this.labelText = scene.add.text(
+        unitState.position.x,
+        unitState.position.y - 66,
+        unitState.displayName,
+        {
+          fontSize: '10px',
+          color: unitState.isPassive ? '#ffd27f' : '#ffffff',
+          fontFamily: 'monospace',
+          backgroundColor: '#00000088',
+          padding: { x: 4, y: 2 },
+        }
+      );
+      this.labelText.setOrigin(0.5);
+      this.labelText.setDepth(6);
+    }
+
+    // Make clickable for selection
+    this.sprite.setInteractive({ useHandCursor: true });
+    this.sprite.on('pointerdown', () => {
+      EventBus.emit('unit-selected', this.state);
+    });
   }
 
   get id(): string {
@@ -56,6 +92,10 @@ export class Unit {
 
   isAlive(): boolean {
     return this.state.state !== 'dead' && this.state.hp > 0;
+  }
+
+  isPassive(): boolean {
+    return this.state.isPassive === true;
   }
 
   distanceTo(other: Unit): number {
@@ -97,6 +137,7 @@ export class Unit {
 
   takeDamage(amount: number): void {
     if (this.state.state === 'dead') return;
+    if (this.state.isInvulnerable) return;
 
     this.state.hp = Math.max(0, this.state.hp - amount);
     this.updateHpBar();
@@ -156,11 +197,13 @@ export class Unit {
 
   syncVisuals(): void {
     this.sprite.setPosition(this.state.position.x, this.state.position.y);
+    this.labelText?.setPosition(this.state.position.x, this.state.position.y - 66);
     this.updateHpBar();
   }
 
   destroy(): void {
     this.sprite.destroy();
     this.hpBar.destroy();
+    this.labelText?.destroy();
   }
 }

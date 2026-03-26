@@ -1,18 +1,21 @@
 import { Scene } from 'phaser';
-import { UnitRole, Position, BattleResult, BattleState, PlayerCommand } from '../types';
+import { UnitRole, Position, BattleResult, BattleState, BattleMode } from '../types';
 import { Unit, createUnitState } from '../entities/Unit';
 import { Hero, createHeroState } from '../entities/Hero';
 import { BattleStateManager } from '../state/BattleState';
-import { CommandSystem } from './CommandSystem';
 import { MovementSystem } from './MovementSystem';
 import { TargetingSystem } from './TargetingSystem';
 import { CombatSystem } from './CombatSystem';
 import { HeroScheduler } from '../ai/HeroScheduler';
 import { ScoredPersonalityBrain } from '../ai/ScoredPersonalityBrain';
+import { OllamaHeroBrain } from '../ai/OllamaHeroBrain';
+import { FeedbackOverlay } from './FeedbackOverlay';
+import { ObstacleSystem, Obstacle } from './Obstacles';
 import { DEFAULT_HEROES } from '../data/heroes';
 
 interface BattleConfig {
   difficulty: number;
+  mode?: BattleMode;
 }
 
 interface ArmyComposition {
@@ -20,13 +23,39 @@ interface ArmyComposition {
   count: number;
 }
 
+interface PlaygroundTargetConfig {
+  name: string;
+  role: UnitRole;
+  position: Position;
+}
+
+const PLAYGROUND_LAYOUT: Obstacle[] = [
+  { id: 'wall-top', label: 'North Wall', x: 410, y: 90, width: 44, height: 220 },
+  { id: 'rock-top', label: 'Top Rocks', x: 550, y: 150, width: 110, height: 70 },
+  { id: 'center-wall', label: 'Center Wall', x: 500, y: 315, width: 150, height: 42 },
+  { id: 'rock-bot', label: 'Bottom Rocks', x: 340, y: 500, width: 110, height: 80 },
+  { id: 'wall-bot', label: 'South Wall', x: 650, y: 420, width: 46, height: 220 },
+];
+
+const PLAYGROUND_TARGETS: PlaygroundTargetConfig[] = [
+  { name: 'North Target', role: 'archer', position: { x: 860, y: 130 } },
+  { name: 'Center Target', role: 'warrior', position: { x: 860, y: 360 } },
+  { name: 'South Target', role: 'archer', position: { x: 860, y: 620 } },
+  { name: 'Pocket Target', role: 'warrior', position: { x: 710, y: 235 } },
+];
+
 export class BattleLoop {
   private stateManager: BattleStateManager;
-  private commandSystem: CommandSystem;
   private movementSystem: MovementSystem;
   private targetingSystem: TargetingSystem;
   private combatSystem: CombatSystem;
   private heroScheduler: HeroScheduler;
+  private ollamaBrain: OllamaHeroBrain;
+  private feedbackOverlay: FeedbackOverlay | null = null;
+  private obstacleSystem: ObstacleSystem;
+  private stopHealthChecks: (() => void) | null = null;
+  private mode: BattleMode = 'battle';
+  private planningRequested = false;
 
   alliedUnits: Unit[] = [];
   enemyUnits: Unit[] = [];
@@ -34,76 +63,91 @@ export class BattleLoop {
 
   constructor() {
     this.stateManager = new BattleStateManager();
-    this.commandSystem = new CommandSystem();
     this.movementSystem = new MovementSystem();
     this.targetingSystem = new TargetingSystem();
     this.combatSystem = new CombatSystem();
+    this.obstacleSystem = new ObstacleSystem();
     const heroTraits = DEFAULT_HEROES[0].traits;
-    this.heroScheduler = new HeroScheduler(new ScoredPersonalityBrain(heroTraits));
+    const fallbackBrain = new ScoredPersonalityBrain(heroTraits);
+    this.ollamaBrain = new OllamaHeroBrain();
+    this.heroScheduler = new HeroScheduler(fallbackBrain, this.ollamaBrain);
+    this.stopHealthChecks = this.ollamaBrain.startHealthChecks();
+  }
+
+  setPlayerDirective(directive: string): void {
+    this.heroScheduler.setPlayerDirective(directive);
+    if (this.mode === 'battle' && this.stateManager.getState().phase === 'init') {
+      this.planningRequested = true;
+    }
+  }
+
+  startBattle(): void {
+    if (this.mode !== 'battle') {
+      return;
+    }
+
+    if (this.stateManager.getState().phase === 'init') {
+      this.stateManager.setPhase('active');
+      this.planningRequested = false;
+    }
+  }
+
+  getObstacleDescription(): string {
+    return this.obstacleSystem.describe();
   }
 
   init(scene: Scene, config: BattleConfig): void {
-    const alliedComp: ArmyComposition[] = [
-      { role: 'warrior', count: 3 },
-      { role: 'archer', count: 2 },
-    ];
+    this.mode = config.mode ?? 'battle';
+    this.feedbackOverlay = new FeedbackOverlay(scene);
+    this.initObstacles(scene);
+    this.movementSystem.setObstacles(this.obstacleSystem);
+    this.combatSystem.setObstacles(this.obstacleSystem);
 
-    const enemyCount = Math.ceil(config.difficulty);
-    const enemyComp: ArmyComposition[] = [
-      { role: 'warrior', count: 2 + enemyCount },
-      { role: 'archer', count: 1 + Math.floor(config.difficulty) },
-    ];
+    this.spawnAlliedArmy(scene);
 
-    // Spawn allied units on left side
-    let yOffset = 200;
-    for (const comp of alliedComp) {
-      for (let i = 0; i < comp.count; i++) {
-        const pos: Position = { x: 100 + Math.random() * 80, y: yOffset + i * 100 };
-        const state = createUnitState('allied', comp.role, pos);
-        const unit = new Unit(scene, state);
-        this.alliedUnits.push(unit);
-      }
-      yOffset += comp.count * 100 + 30;
+    if (this.mode === 'playground') {
+      this.spawnPlaygroundTargets(scene);
+    } else {
+      this.spawnEnemyArmy(scene, config.difficulty);
     }
 
-    // Spawn enemy units on right side
-    yOffset = 200;
-    for (const comp of enemyComp) {
-      for (let i = 0; i < comp.count; i++) {
-        const pos: Position = { x: 800 + Math.random() * 80, y: yOffset + i * 90 };
-        const state = createUnitState('enemy', comp.role, pos);
-        const unit = new Unit(scene, state);
-        this.enemyUnits.push(unit);
-      }
-      yOffset += comp.count * 90 + 20;
-    }
+    this.spawnHero(scene);
+    this.heroScheduler.setTerrainDescription(this.buildTerrainDescription());
 
-    // Spawn hero
-    const heroConfig = DEFAULT_HEROES[0];
-    const heroState = createHeroState(heroConfig, { x: 60, y: 380 });
-    const hero = new Hero(scene, heroState);
-    this.heroes.push(hero);
-
-    // Initialize state manager
     this.stateManager.init(
-      this.alliedUnits.map((u) => u.state),
-      this.enemyUnits.map((u) => u.state),
-      this.heroes.map((h) => h.state)
+      this.alliedUnits.map((unit) => unit.state),
+      this.enemyUnits.map((unit) => unit.state),
+      this.heroes.map((hero) => hero.state),
+      this.obstacleSystem.getObstacles(),
+      this.mode
     );
-    this.stateManager.setPhase('active');
-  }
-
-  setCommand(cmd: PlayerCommand): void {
-    this.commandSystem.setCommand(cmd);
+    this.stateManager.setPhase(this.mode === 'battle' ? 'init' : 'active');
   }
 
   update(dt: number): BattleResult {
-    if (this.stateManager.getState().phase !== 'active') return null;
+    const state = this.stateManager.getState();
+
+    if (state.phase === 'init') {
+      if (this.shouldProcessPlanning()) {
+        this.heroScheduler.update(
+          0,
+          this.heroes,
+          state,
+          this.alliedUnits,
+          this.enemyUnits
+        );
+      }
+
+      this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
+      return null;
+    }
+
+    if (state.phase !== 'active') {
+      return null;
+    }
 
     this.stateManager.updateTime(dt);
 
-    // TDD-specified update order
-    this.commandSystem.update(this.heroes);
     this.heroScheduler.update(
       dt,
       this.heroes,
@@ -112,17 +156,20 @@ export class BattleLoop {
       this.enemyUnits
     );
     this.movementSystem.update(this.alliedUnits, this.enemyUnits, dt);
-    this.targetingSystem.update(
+    this.targetingSystem.update(this.alliedUnits, this.enemyUnits);
+    const damageEvents = this.combatSystem.update(
       this.alliedUnits,
       this.enemyUnits,
-      this.commandSystem.getCommand()
+      dt,
+      this.stateManager.getState().timeSec
     );
-    this.combatSystem.update(this.alliedUnits, this.enemyUnits, dt);
+    this.stateManager.recordDamage(damageEvents);
 
-    // Sync visuals
     for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
       unit.syncVisuals();
     }
+
+    this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
 
     return this.winConditionCheck();
   }
@@ -131,9 +178,112 @@ export class BattleLoop {
     return this.stateManager.getState();
   }
 
+  private shouldProcessPlanning(): boolean {
+    if (this.mode !== 'battle') {
+      return false;
+    }
+
+    if (this.planningRequested) {
+      return true;
+    }
+
+    return this.heroes.some(
+      (hero) => Boolean(hero.state.currentDirective || hero.state.currentDecision)
+    );
+  }
+
+  private initObstacles(scene: Scene): void {
+    if (this.mode === 'playground') {
+      this.obstacleSystem.init(scene, { layout: PLAYGROUND_LAYOUT });
+      return;
+    }
+
+    this.obstacleSystem.init(scene);
+  }
+
+  private spawnAlliedArmy(scene: Scene): void {
+    const alliedComposition: ArmyComposition[] = [
+      { role: 'warrior', count: 3 },
+      { role: 'archer', count: 2 },
+    ];
+
+    let yOffset = 200;
+    for (const composition of alliedComposition) {
+      for (let i = 0; i < composition.count; i++) {
+        const position: Position = { x: 100 + Math.random() * 80, y: yOffset + i * 100 };
+        const state = createUnitState('allied', composition.role, position);
+        this.alliedUnits.push(new Unit(scene, state));
+      }
+      yOffset += composition.count * 100 + 30;
+    }
+  }
+
+  private spawnEnemyArmy(scene: Scene, difficulty: number): void {
+    const enemyCount = Math.ceil(difficulty);
+    const enemyComposition: ArmyComposition[] = [
+      { role: 'warrior', count: 2 + enemyCount },
+      { role: 'archer', count: 1 + Math.floor(difficulty) },
+    ];
+
+    let yOffset = 200;
+    for (const composition of enemyComposition) {
+      for (let i = 0; i < composition.count; i++) {
+        const position: Position = { x: 800 + Math.random() * 80, y: yOffset + i * 90 };
+        const state = createUnitState('enemy', composition.role, position);
+        this.enemyUnits.push(new Unit(scene, state));
+      }
+      yOffset += composition.count * 90 + 20;
+    }
+  }
+
+  private spawnPlaygroundTargets(scene: Scene): void {
+    for (const target of PLAYGROUND_TARGETS) {
+      const state = createUnitState('enemy', target.role, target.position, {
+        displayName: target.name,
+        hp: 9999,
+        maxHp: 9999,
+        attack: 0,
+        attackRange: 0,
+        attackSpeed: 0,
+        moveSpeed: 0,
+        isPassive: true,
+        isInvulnerable: true,
+      });
+      this.enemyUnits.push(new Unit(scene, state));
+    }
+  }
+
+  private spawnHero(scene: Scene): void {
+    const heroConfig = DEFAULT_HEROES[0];
+    const heroState = createHeroState(heroConfig, { x: 60, y: 380 });
+    this.heroes.push(new Hero(scene, heroState));
+  }
+
+  private buildTerrainDescription(): string {
+    if (this.mode !== 'playground') {
+      return this.obstacleSystem.describe();
+    }
+
+    const targets = this.enemyUnits
+      .map(
+        (unit) =>
+          `  - ${unit.state.displayName} [${unit.id}] at (${Math.round(unit.state.position.x)}, ${Math.round(unit.state.position.y)}) is a passive training target`
+      )
+      .join('\n');
+
+    return `${this.obstacleSystem.describe()}
+  Playground mode: there are no hostile enemies here.
+  Use the named training targets to test routing and obedience.
+${targets}`;
+  }
+
   private winConditionCheck(): BattleResult {
-    const alliedAlive = this.alliedUnits.some((u) => u.isAlive());
-    const enemyAlive = this.enemyUnits.some((u) => u.isAlive());
+    if (this.mode === 'playground') {
+      return null;
+    }
+
+    const alliedAlive = this.alliedUnits.some((unit) => unit.isAlive());
+    const enemyAlive = this.enemyUnits.some((unit) => unit.isAlive());
 
     if (!enemyAlive) {
       this.stateManager.setPhase('ended');
@@ -147,14 +297,22 @@ export class BattleLoop {
   }
 
   destroy(): void {
+    this.stopHealthChecks?.();
+    this.ollamaBrain.resetConversation();
+    this.feedbackOverlay?.destroy();
+    this.obstacleSystem.destroy();
+
     for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
       unit.destroy();
     }
     for (const hero of this.heroes) {
       hero.destroy();
     }
+
     this.alliedUnits = [];
     this.enemyUnits = [];
     this.heroes = [];
+    this.mode = 'battle';
+    this.planningRequested = false;
   }
 }

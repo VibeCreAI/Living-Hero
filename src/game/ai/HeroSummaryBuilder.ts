@@ -5,10 +5,13 @@ export function buildHeroSummary(
   battleState: BattleState
 ): HeroSummary {
   return {
+    mode: battleState.mode,
     heroState,
-    currentCommand: heroState.currentCommand,
+    currentDirective: heroState.currentDirective,
     nearbyAllies: battleState.alliedUnits.filter((u) => u.state !== 'dead'),
     nearbyEnemies: battleState.enemyUnits.filter((u) => u.state !== 'dead'),
+    obstacles: battleState.obstacles,
+    recentDamage: battleState.recentDamage,
     battlePhase: battleState.phase,
     timeSec: battleState.timeSec,
   };

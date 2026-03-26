@@ -103,42 +103,60 @@ Ollama is a **local LLM runtime** that wraps llama.cpp with:
 
 | Model | Params | Size | Speed (CPU) | Quality |
 |-------|--------|------|-------------|---------|
-| `phi3.5` | 3.8B | ~2.2GB | ~50ms/tok | Good structured output |
-| `qwen2.5:3b` | 3B | ~1.9GB | ~45ms/tok | Strong reasoning |
-| `llama3.2:3b` | 3B | ~2.0GB | ~45ms/tok | Good conversation |
-| `gemma2:2b` | 2.6B | ~1.6GB | ~35ms/tok | Fastest, decent quality |
+| `smollm3` | 3B | ~2.0GB | ~45ms/tok | 95% JSON adherence, best structured output |
+| `llama3.2:3b` | 3B | ~2.0GB | ~45ms/tok | Good conversation, solid all-rounder |
+| `smollm3` | 3.8B | ~2.2GB | ~50ms/tok | Good for coding/structured tasks |
+| `gemma2:2b` | 2.6B | ~1.6GB | ~35ms/tok | Fastest, for low-end hardware |
 
-Default recommendation: `phi3.5` (best balance of speed, quality, and
-structured output reliability for game AI).
+Default recommendation: `smollm3` (best structured JSON output reliability
+at 3B scale — 95% schema adherence, outperforms Llama 3.2 3B and Qwen 2.5 3B
+on reasoning benchmarks, 128K context support).
 
 ## API
 
 Ollama exposes an OpenAI-compatible endpoint:
 
 ```
-POST http://localhost:11434/v1/chat/completions
+POST http://localhost:11434/api/chat
 Content-Type: application/json
 
 {
-  "model": "phi3.5",
+  "model": "smollm3",
   "messages": [
     {"role": "system", "content": "...hero personality..."},
     {"role": "user", "content": "...battlefield context + player message..."}
   ],
-  "max_tokens": 100,
-  "temperature": 0.7
+  "stream": false,
+  "format": {
+    "type": "object",
+    "properties": {
+      "chatResponse": { "type": "string" },
+      "intent": { "type": "string", "enum": ["hold_position","advance_to_point","protect_target","focus_enemy","retreat_to_point","use_skill"] },
+      "targetId": { "type": "string" },
+      "moveTo": { "type": "object", "properties": { "x": {"type":"number"}, "y": {"type":"number"} } },
+      "recheckInSec": { "type": "number" }
+    },
+    "required": ["chatResponse", "intent", "recheckInSec"]
+  },
+  "options": {
+    "num_predict": 100,
+    "temperature": 0.7
+  }
 }
 ```
+
+> **Key feature**: Ollama v0.5+ supports **structured outputs** — passing a JSON
+> schema in the `format` field constrains the model's output grammar to guarantee
+> valid JSON matching the schema. No more parsing `\`\`\`decision` blocks from
+> free-text responses.
 
 Response:
 ```json
 {
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "...hero response with decision JSON..."
-    }
-  }]
+  "message": {
+    "role": "assistant",
+    "content": "{\"chatResponse\":\"Moving warriors to intercept!\",\"intent\":\"focus_enemy\",\"targetId\":\"unit-enemy-archer-0\",\"recheckInSec\":2}"
+  }
 }
 ```
 
@@ -151,7 +169,7 @@ Response:
 ### Prerequisites
 
 - Ollama installed: https://ollama.com/download
-- Pull a model: `ollama pull phi3.5`
+- Pull a model: `ollama pull smollm3`
 - Start server: `ollama serve` (runs on port 11434)
 
 ### Verification
@@ -160,7 +178,7 @@ Response:
 curl http://localhost:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "phi3.5",
+    "model": "smollm3",
     "messages": [{"role": "user", "content": "Hello, who are you?"}],
     "max_tokens": 50
   }'
@@ -191,7 +209,7 @@ class LLMClient {
   private model: string;
   private available: boolean;
 
-  constructor(baseUrl: string = 'http://localhost:11434', model: string = 'phi3.5');
+  constructor(baseUrl: string = 'http://localhost:11434', model: string = 'smollm3');
 
   async healthCheck(): Promise<boolean>;
 
@@ -230,23 +248,15 @@ PERSONALITY:
 RULES:
 1. You command units in battle. You do NOT control them directly.
 2. You receive battlefield reports and player messages.
-3. You must ALWAYS respond with:
-   a) A short conversational response (1-2 sentences, in character)
-   b) A JSON decision block in this exact format:
-
-\`\`\`decision
-{
-  "intent": "advance_to_point" | "hold_position" | "protect_target" | "focus_enemy" | "retreat_to_point",
-  "targetId": "optional-unit-id",
-  "moveTo": {"x": number, "y": number},
-  "recheckInSec": 2
-}
-\`\`\`
-
-4. Keep responses SHORT. You are in real-time combat.
-5. Stay in character based on your personality traits.`;
+3. Your response is structured JSON. Put your in-character reply in "chatResponse".
+4. Choose an intent that matches your personality and the battlefield situation.
+5. Keep chatResponse SHORT (1-2 sentences). You are in real-time combat.
+6. Stay in character based on your personality traits.`;
 }
 ```
+
+> The JSON format is enforced by Ollama structured outputs — the system prompt
+> only needs to guide the model on *what* to say, not *how* to format it.
 
 ---
 
@@ -314,30 +324,34 @@ Flow:
 1. Build system prompt from hero personality
 2. Build context prompt from HeroSummary
 3. Append player message (if any)
-4. Send to Ollama server via `LLMClient`
-5. Parse response: extract `decision` JSON block + conversational text
-6. Validate decision fields (clamp positions, verify targetIds)
-7. Return decision + chat response
-8. On failure: return fallback decision
+4. Send to Ollama server via `LLMClient` with `format` schema
+5. `JSON.parse()` the response content (guaranteed valid by Ollama structured outputs)
+6. Extract `chatResponse` string and decision fields
+7. Validate decision fields (clamp positions, verify targetIds)
+8. Return decision + chat response
+9. On failure: return fallback decision
 
-### Response Parsing
+### Response Parsing (Structured Outputs)
 
-The LLM response contains both conversational text and a JSON block:
+Ollama v0.5+ structured outputs guarantee the response is valid JSON matching
+the provided schema. No markdown block parsing needed:
 
+```ts
+const raw = JSON.parse(response.message.content);
+// raw = { chatResponse: "Moving warriors!", intent: "focus_enemy", targetId: "...", recheckInSec: 2 }
+
+const chatResponse = raw.chatResponse;
+const decision: HeroDecision = {
+  intent: raw.intent,
+  targetId: raw.targetId,
+  moveTo: raw.moveTo,
+  recheckInSec: raw.recheckInSec,
+  priority: "medium",
+  rationaleTag: `llm_${raw.intent}`,
+};
 ```
-I'll push the warriors forward to engage those archers. They won't last
-long against our front line.
 
-\```decision
-{"intent":"focus_enemy","targetId":"unit-enemy-archer-0","recheckInSec":2}
-\```
-```
-
-Parse by:
-1. Extract text between ` ```decision ` and ` ``` ` markers
-2. `JSON.parse()` the extracted block → `HeroDecision`
-3. Everything outside the block → `chatResponse`
-4. If no valid JSON block found → return null decision (fallback)
+If `JSON.parse()` fails (should be rare with structured outputs) → return null decision (fallback).
 
 ---
 
@@ -448,7 +462,7 @@ Create `src/game/ai/aiConfig.ts`:
 export const AI_CONFIG = {
   ollama: {
     baseUrl: 'http://localhost:11434',
-    model: 'phi3.5',
+    model: 'smollm3',  // best structured JSON at 3B scale
     maxTokens: 100,
     temperature: 0.7,
     timeoutMs: 3000,

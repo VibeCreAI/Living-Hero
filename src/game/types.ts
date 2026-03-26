@@ -8,6 +8,8 @@ export interface Position {
 export type UnitFaction = 'allied' | 'enemy';
 export type UnitRole = 'warrior' | 'archer';
 export type UnitAnimState = 'idle' | 'moving' | 'attacking' | 'dead';
+export type UnitOrderMode = 'advance' | 'focus' | 'hold' | 'protect' | 'retreat';
+export type UnitGroup = 'all' | 'warriors' | 'archers';
 
 export interface UnitConfig {
   role: UnitRole;
@@ -22,6 +24,7 @@ export interface UnitState {
   id: string;
   faction: UnitFaction;
   role: UnitRole;
+  displayName?: string;
   position: Position;
   hp: number;
   maxHp: number;
@@ -30,6 +33,14 @@ export interface UnitState {
   attackSpeed: number;
   moveSpeed: number;
   targetId?: string;
+  isPassive?: boolean;
+  isInvulnerable?: boolean;
+  orderMode?: UnitOrderMode;
+  orderPoint?: Position;
+  orderTargetId?: string;
+  orderRadius?: number;
+  orderLeashRadius?: number;
+  orderPreferredTargetRole?: UnitRole;
   state: UnitAnimState;
 }
 
@@ -53,7 +64,7 @@ export interface HeroState {
   id: string;
   name: string;
   position: Position;
-  currentCommand?: PlayerCommand;
+  currentDirective?: string;
   currentDecision?: HeroDecision;
   traits: HeroTraits;
 }
@@ -75,34 +86,69 @@ export type IntentType =
   | 'retreat_to_point'
   | 'use_skill';
 
+export interface GroupOrder {
+  group: UnitGroup;
+  intent: IntentType;
+  targetId?: string;
+  moveTo?: Position;
+}
+
 export interface HeroDecision {
   intent: IntentType;
   targetId?: string;
   moveTo?: Position;
   skillId?: string;
+  groupOrders?: GroupOrder[];
   priority: 'low' | 'medium' | 'high';
   rationaleTag: string;
   recheckInSec: number;
 }
 
+export interface DamageEvent {
+  timeSec: number;
+  attackerId: string;
+  attackerFaction: UnitFaction;
+  attackerRole: UnitRole;
+  targetId: string;
+  targetFaction: UnitFaction;
+  targetRole: UnitRole;
+  damage: number;
+}
+
+export interface BattleObstacle {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface HeroSummary {
+  mode: BattleMode;
   heroState: HeroState;
-  currentCommand?: PlayerCommand;
+  currentDirective?: string;
   nearbyAllies: UnitState[];
   nearbyEnemies: UnitState[];
+  obstacles: BattleObstacle[];
+  recentDamage: DamageEvent[];
   battlePhase: BattlePhase;
   timeSec: number;
 }
 
 // ── Battle types ──
+export type BattleMode = 'battle' | 'playground';
 export type BattlePhase = 'init' | 'active' | 'ended';
 
 export interface BattleState {
+  mode: BattleMode;
   timeSec: number;
   phase: BattlePhase;
   alliedUnits: UnitState[];
   enemyUnits: UnitState[];
   heroes: HeroState[];
+  obstacles: BattleObstacle[];
+  recentDamage: DamageEvent[];
 }
 
 export type BattleResult = 'allied_win' | 'enemy_win' | null;
@@ -123,4 +169,5 @@ export interface OverworldNode {
   label: string;
   difficulty: number; // enemy count multiplier
   completed: boolean;
+  mode?: BattleMode;
 }

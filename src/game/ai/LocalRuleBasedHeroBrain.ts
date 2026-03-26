@@ -1,5 +1,6 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
 import { HeroSummary, HeroDecision, Position } from '../types';
+import { refineDecisionPositionForCover } from './cover';
 
 /**
  * Simple rule-based fallback brain.
@@ -7,24 +8,32 @@ import { HeroSummary, HeroDecision, Position } from '../types';
  */
 export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
   decide(summary: HeroSummary): HeroDecision {
-    const command = summary.currentCommand;
     const allies = summary.nearbyAllies;
     const enemies = summary.nearbyEnemies;
+    let decision: HeroDecision;
+    const allyHpPct = allies.length > 0
+      ? allies.reduce((sum, ally) => sum + ally.hp / ally.maxHp, 0) / allies.length
+      : 1;
 
-    if (!command || command.type === 'advance') {
-      return this.advanceDecision(enemies);
+    if (enemies.length === 0) {
+      return {
+        intent: 'hold_position',
+        moveTo: { ...summary.heroState.position },
+        priority: 'low',
+        rationaleTag: 'fallback_no_enemies',
+        recheckInSec: 3,
+      };
     }
 
-    switch (command.type) {
-      case 'protect':
-        return this.protectDecision(allies);
-      case 'hold':
-        return this.holdDecision(summary.heroState.position);
-      case 'focus':
-        return this.focusDecision(command.targetId, enemies);
-      default:
-        return this.advanceDecision(enemies);
+    if (allyHpPct < 0.35) {
+      decision = this.protectDecision(allies);
+    } else if (allyHpPct < 0.55 && allies.length <= enemies.length) {
+      decision = this.holdDecision(summary.heroState.position);
+    } else {
+      decision = this.advanceDecision(enemies);
     }
+
+    return refineDecisionPositionForCover(summary, decision);
   }
 
   private advanceDecision(enemies: { position: Position }[]): HeroDecision {
@@ -72,27 +81,6 @@ export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
       rationaleTag: 'hold_ordered',
       recheckInSec: 3,
     };
-  }
-
-  private focusDecision(
-    targetId: string | undefined,
-    enemies: { id: string; position: Position }[]
-  ): HeroDecision {
-    if (targetId) {
-      const target = enemies.find((e) => e.id === targetId);
-      if (target) {
-        return {
-          intent: 'focus_enemy',
-          targetId,
-          moveTo: { ...target.position },
-          priority: 'high',
-          rationaleTag: 'focus_ordered_target',
-          recheckInSec: 2,
-        };
-      }
-    }
-
-    return this.advanceDecision(enemies);
   }
 
   private clusterCenter(units: { position: Position }[]): Position {
