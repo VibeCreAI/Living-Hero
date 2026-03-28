@@ -21,15 +21,8 @@ const INTENT_LABELS: Record<IntentType, string> = {
   use_skill: 'SKILL',
 };
 
-/**
- * Draws visual feedback overlays on the battle scene:
- * - Line from hero to target/destination
- * - Highlight ring on targeted unit
- * - Intent color-coded label above hero
- */
 export class FeedbackOverlay {
   private graphics: Phaser.GameObjects.Graphics;
-  private targetRing: Phaser.GameObjects.Arc | null = null;
   private scene: Scene;
   private floatingTexts = new Set<Phaser.GameObjects.Text>();
   private projectiles = new Set<Phaser.GameObjects.Image>();
@@ -42,10 +35,7 @@ export class FeedbackOverlay {
     scene.textures.get('red-archer-arrow')?.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
 
-  showDamageEvents(
-    events: DamageEvent[],
-    units: Unit[]
-  ): void {
+  showDamageEvents(events: DamageEvent[], units: Unit[]): void {
     if (events.length === 0) {
       return;
     }
@@ -67,16 +57,11 @@ export class FeedbackOverlay {
     }
   }
 
-  update(
-    heroes: Hero[],
-    alliedUnits: Unit[],
-    enemyUnits: Unit[]
-  ): void {
+  update(heroes: Hero[], alliedUnits: Unit[], enemyUnits: Unit[]): void {
     this.graphics.clear();
 
-    // Clean up old target ring
-    this.targetRing?.destroy();
-    this.targetRing = null;
+    const allUnits = [...alliedUnits, ...enemyUnits];
+    const pulse = (Math.sin(this.scene.time.now / 180) + 1) * 0.5;
 
     for (const hero of heroes) {
       const decision = hero.state.currentDecision;
@@ -85,12 +70,10 @@ export class FeedbackOverlay {
       const intent = decision.intent;
       const color = INTENT_COLORS[intent] ?? 0xffffff;
 
-      // Update hero intent text with color-coded label
       const label = INTENT_LABELS[intent] ?? intent;
       hero.intentText.setText(label);
       hero.intentText.setColor(`#${color.toString(16).padStart(6, '0')}`);
 
-      // Draw movement line to destination
       if (decision.moveTo) {
         this.graphics.lineStyle(1.5, color, 0.4);
         this.graphics.beginPath();
@@ -98,29 +81,21 @@ export class FeedbackOverlay {
         this.graphics.lineTo(decision.moveTo.x, decision.moveTo.y);
         this.graphics.strokePath();
 
-        // Small diamond at destination
-        const dx = decision.moveTo.x;
-        const dy = decision.moveTo.y;
-        this.graphics.fillStyle(color, 0.5);
-        this.graphics.fillTriangle(dx, dy - 5, dx - 4, dy, dx + 4, dy);
-        this.graphics.fillTriangle(dx, dy + 5, dx - 4, dy, dx + 4, dy);
+        const radius = 18 + pulse * 8;
+        this.graphics.lineStyle(2, color, 0.65);
+        this.graphics.strokeCircle(decision.moveTo.x, decision.moveTo.y, radius);
+        this.graphics.fillStyle(color, 0.12);
+        this.graphics.fillCircle(decision.moveTo.x, decision.moveTo.y, 10 + pulse * 3);
       }
 
-      // Highlight targeted unit
       if (decision.targetId) {
-        const allUnits = [...alliedUnits, ...enemyUnits];
-        const target = allUnits.find(
-          (u) => u.id === decision.targetId && u.isAlive()
-        );
+        const target = allUnits.find((u) => u.id === decision.targetId && u.isAlive());
         if (target) {
-          this.targetRing = this.scene.add.circle(
-            target.state.position.x,
-            target.state.position.y,
-            30
-          );
-          this.targetRing.setStrokeStyle(2, color, 0.6);
-          this.targetRing.setFillStyle(color, 0.08);
-          this.targetRing.setDepth(4);
+          const radius = 28 + pulse * 6;
+          this.graphics.lineStyle(2, color, 0.75);
+          this.graphics.strokeCircle(target.state.position.x, target.state.position.y, radius);
+          this.graphics.fillStyle(color, 0.08);
+          this.graphics.fillCircle(target.state.position.x, target.state.position.y, 18);
         }
       }
     }
@@ -128,7 +103,6 @@ export class FeedbackOverlay {
 
   destroy(): void {
     this.graphics.destroy();
-    this.targetRing?.destroy();
     for (const projectile of this.projectiles) {
       projectile.destroy();
     }
@@ -139,11 +113,7 @@ export class FeedbackOverlay {
     this.floatingTexts.clear();
   }
 
-  private spawnArrowProjectile(
-    attacker: Unit,
-    target: Unit,
-    attackerFaction: UnitFaction
-  ): void {
+  private spawnArrowProjectile(attacker: Unit, target: Unit, attackerFaction: UnitFaction): void {
     const texture = attackerFaction === 'enemy' ? 'red-archer-arrow' : 'blue-archer-arrow';
     const startX = attacker.state.position.x;
     const startY = attacker.state.position.y - 20;
@@ -177,11 +147,7 @@ export class FeedbackOverlay {
     });
   }
 
-  private spawnDamageNumber(
-    target: Unit,
-    damage: number,
-    targetFaction: 'allied' | 'enemy'
-  ): void {
+  private spawnDamageNumber(target: Unit, damage: number, targetFaction: 'allied' | 'enemy'): void {
     const color = targetFaction === 'allied' ? '#ff8f80' : '#ffd166';
     const startX = target.state.position.x + Phaser.Math.Between(-8, 8);
     const startY = target.state.position.y - 62;

@@ -21,6 +21,10 @@ const BIGBAR_BASE_CENTER_FRAME = 'ui-bigbar-base-center';
 const BIGBAR_BASE_RIGHT_FRAME = 'ui-bigbar-base-right';
 const BIGBAR_FILL_FRAME = 'ui-bigbar-fill-strip';
 
+interface UnitOptions {
+  selectionHandler?: (state: UnitState) => void;
+}
+
 export function createUnitState(
   faction: UnitFaction,
   role: UnitRole,
@@ -61,20 +65,25 @@ export class Unit {
   private scene: Scene;
   private attackCooldown: number = 0;
   private damageFlashToken = 0;
-  private readonly baseScale = 0.5;
+  private readonly baseScale: number;
+  private readonly hpBarYOffset: number;
+  private readonly labelYOffset: number;
   private persistentTint?: number;
   private facingFlipX: boolean;
 
-  constructor(scene: Scene, unitState: UnitState) {
+  constructor(scene: Scene, unitState: UnitState, options: UnitOptions = {}) {
     this.scene = scene;
     this.state = unitState;
+    this.baseScale = unitState.role === 'hero' ? 0.75 : 0.5;
+    this.hpBarYOffset = unitState.role === 'hero' ? 64 : HP_BAR_Y_OFFSET;
+    this.labelYOffset = unitState.role === 'hero' ? 82 : 66;
 
-    const prefix = unitState.faction === 'allied' ? 'blue' : 'red';
-    const textureKey = `${prefix}-${unitState.role}-idle`;
+    const animationPrefix = getAnimationPrefix(unitState.faction, unitState.role);
+    const textureKey = `${animationPrefix}-idle`;
 
     this.sprite = scene.add.sprite(unitState.position.x, unitState.position.y, textureKey);
     this.sprite.setScale(this.baseScale);
-    this.sprite.play(`${prefix}-${unitState.role}-idle-anim`);
+    this.sprite.play(`${animationPrefix}-idle-anim`);
     this.facingFlipX = unitState.faction === 'enemy';
     this.sprite.setFlipX(this.facingFlipX);
     if (unitState.isPassive) {
@@ -88,7 +97,7 @@ export class Unit {
 
     this.hpBarBaseLeft = scene.add.image(
       unitState.position.x,
-      unitState.position.y - HP_BAR_Y_OFFSET,
+      unitState.position.y - this.hpBarYOffset,
       HP_BAR_TEXTURE_BASE,
       BIGBAR_BASE_LEFT_FRAME
     );
@@ -98,7 +107,7 @@ export class Unit {
 
     this.hpBarBaseCenter = scene.add.tileSprite(
       unitState.position.x,
-      unitState.position.y - HP_BAR_Y_OFFSET,
+      unitState.position.y - this.hpBarYOffset,
       HP_BAR_BASE_CENTER_TILE_SOURCE_WIDTH,
       HP_BAR_BASE_SOURCE_HEIGHT,
       HP_BAR_TEXTURE_BASE,
@@ -110,7 +119,7 @@ export class Unit {
 
     this.hpBarBaseRight = scene.add.image(
       unitState.position.x,
-      unitState.position.y - HP_BAR_Y_OFFSET,
+      unitState.position.y - this.hpBarYOffset,
       HP_BAR_TEXTURE_BASE,
       BIGBAR_BASE_RIGHT_FRAME
     );
@@ -120,7 +129,7 @@ export class Unit {
 
     this.hpBarFill = scene.add.tileSprite(
       unitState.position.x,
-      unitState.position.y - HP_BAR_Y_OFFSET,
+      unitState.position.y - this.hpBarYOffset,
       HP_BAR_FILL_MAX_SCENE_WIDTH / HP_BAR_SCALE,
       HP_BAR_FILL_SOURCE_HEIGHT,
       HP_BAR_TEXTURE_FILL,
@@ -134,11 +143,16 @@ export class Unit {
     if (unitState.displayName) {
       this.labelText = scene.add.text(
         unitState.position.x,
-        unitState.position.y - 66,
+        unitState.position.y - this.labelYOffset,
         unitState.displayName,
         {
           fontSize: '10px',
-          color: unitState.isPassive ? '#ffd27f' : '#ffffff',
+          color:
+            unitState.role === 'hero'
+              ? '#ffd700'
+              : unitState.isPassive
+                ? '#ffd27f'
+                : '#ffffff',
           fontFamily: '"NeoDunggeunmoPro", monospace',
           backgroundColor: '#00000088',
           padding: { x: 4, y: 2 },
@@ -150,9 +164,7 @@ export class Unit {
 
     // Make clickable for selection
     this.sprite.setInteractive({ useHandCursor: true });
-    this.sprite.on('pointerdown', () => {
-      EventBus.emit('unit-selected', this.state);
-    });
+    this.setSelectionHandler(options.selectionHandler);
   }
 
   get id(): string {
@@ -282,18 +294,17 @@ export class Unit {
     if (this.state.state === newState) return;
 
     this.state.state = newState;
-    const prefix = this.state.faction === 'allied' ? 'blue' : 'red';
-    const role = this.state.role;
+    const animationPrefix = getAnimationPrefix(this.state.faction, this.state.role);
 
     switch (newState) {
       case 'idle':
-        this.sprite.play(`${prefix}-${role}-idle-anim`, true);
+        this.sprite.play(`${animationPrefix}-idle-anim`, true);
         break;
       case 'moving':
-        this.sprite.play(`${prefix}-${role}-run-anim`, true);
+        this.sprite.play(`${animationPrefix}-run-anim`, true);
         break;
       case 'attacking':
-        this.sprite.play(`${prefix}-${role}-attack-anim`, true);
+        this.sprite.play(`${animationPrefix}-attack-anim`, true);
         this.sprite.once('animationcomplete', () => {
           if (this.isAlive()) {
             this.setAnimState('idle');
@@ -308,7 +319,7 @@ export class Unit {
     const capSceneWidth = HP_BAR_BASE_CAP_SOURCE_WIDTH * HP_BAR_SCALE;
     const centerSceneWidth = totalSceneWidth - capSceneWidth * 2;
     const leftX = Math.round(this.state.position.x - totalSceneWidth / 2);
-    const baseY = Math.round(this.state.position.y - HP_BAR_Y_OFFSET);
+    const baseY = Math.round(this.state.position.y - this.hpBarYOffset);
 
     const visible = this.isAlive();
     this.hpBarBaseLeft.setVisible(visible);
@@ -341,8 +352,20 @@ export class Unit {
 
   syncVisuals(): void {
     this.sprite.setPosition(this.state.position.x, this.state.position.y);
-    this.labelText?.setPosition(this.state.position.x, this.state.position.y - 66);
+    this.labelText?.setPosition(this.state.position.x, this.state.position.y - this.labelYOffset);
     this.updateHpBar();
+  }
+
+  setSelectionHandler(handler?: (state: UnitState) => void): void {
+    this.sprite.removeAllListeners('pointerdown');
+    this.sprite.on('pointerdown', () => {
+      if (handler) {
+        handler(this.state);
+        return;
+      }
+
+      EventBus.emit('unit-selected', this.state);
+    });
   }
 
   destroy(): void {
@@ -378,4 +401,9 @@ export class Unit {
       fillTexture.add(BIGBAR_FILL_FRAME, 0, 0, 30, 64, 3);
     }
   }
+}
+
+function getAnimationPrefix(faction: UnitFaction, role: UnitRole): string {
+  const factionPrefix = faction === 'allied' ? 'blue' : 'red';
+  return `${factionPrefix}-${role}`;
 }

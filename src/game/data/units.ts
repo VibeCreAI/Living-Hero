@@ -1,6 +1,6 @@
-import { UnitConfig } from '../types';
+import { UnitConfig, UnitRole } from '../types';
 
-export const UNIT_CONFIGS: Record<string, UnitConfig> = {
+export const UNIT_CONFIGS: Record<UnitRole, UnitConfig> = {
   warrior: {
     role: 'warrior',
     hp: 100,
@@ -16,5 +16,13 @@ export const UNIT_CONFIGS: Record<string, UnitConfig> = {
     attackRange: 200,
     attackSpeed: 0.8,
     moveSpeed: 60,
+  },
+  hero: {
+    role: 'hero',
+    hp: 180,
+    attack: 26,
+    attackRange: 56,
+    attackSpeed: 1.15,
+    moveSpeed: 120,
   },
 };

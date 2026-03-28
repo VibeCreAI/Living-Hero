@@ -1,6 +1,6 @@
 import { Unit } from '../entities/Unit';
 import { Position } from '../types';
-import { ObstacleSystem } from './Obstacles';
+import { ObstacleSystem, OBSTACLE_CLEARANCE } from './Obstacles';
 
 interface NavigationState {
   path: Position[];
@@ -16,7 +16,7 @@ const TARGET_SHIFT_REPATH = 28;
 const WAYPOINT_REACHED_DISTANCE = 10;
 const STUCK_REPATH_DELAY = 0.35;
 const ENGAGE_LINE_OF_SIGHT_PADDING = 6;
-const ORDER_SLOT_PADDING = 10;
+const ORDER_SLOT_PADDING = OBSTACLE_CLEARANCE;
 const ORDER_SLOT_COUNT = 8;
 const MAP_WIDTH = 1024;
 const MAP_HEIGHT = 768;
@@ -304,7 +304,8 @@ export class MovementSystem {
     const anchor = unit.state.orderPoint;
     const seed = this.hash(unit.id);
     const angle = (seed % 360) * (Math.PI / 180);
-    const baseRadius = unit.state.role === 'warrior' ? 24 : 46;
+    const baseRadius =
+      unit.state.role === 'warrior' ? 24 : unit.state.role === 'hero' ? 18 : 46;
     const variance = (seed % 3) * 8;
     const radius = Math.min((unit.state.orderRadius ?? 80) * 0.55, baseRadius + variance);
     const angleStep = (Math.PI * 2) / ORDER_SLOT_COUNT;
@@ -315,8 +316,13 @@ export class MovementSystem {
         y: anchor.y + Math.sin(angle + i * angleStep) * radius,
       });
 
-      if (this.obstacles && this.obstacles.isBlocked(slot, ORDER_SLOT_PADDING)) {
-        continue;
+      if (this.obstacles) {
+        const resolvedSlot = this.obstacles.findNearestNavigablePoint(slot);
+        if (this.obstacles.isBlocked(resolvedSlot, ORDER_SLOT_PADDING)) {
+          continue;
+        }
+
+        return resolvedSlot;
       }
 
       return slot;
@@ -380,7 +386,7 @@ export class MovementSystem {
       return clamped;
     }
 
-    return this.obstacles.pushOut(clamped);
+    return this.obstacles.findNearestNavigablePoint(clamped);
   }
 
   private clampToMap(position: Position): Position {

@@ -20,16 +20,22 @@ const MAP_PADDING = 28;
 
 const WARRIOR_FRONT_OFFSET = 56;
 const ARCHER_REAR_OFFSET = 64;
+const HERO_FRONT_OFFSET = 42;
 const WARRIOR_FOCUS_LEASH = 280;
 const ARCHER_FOCUS_LEASH = 130;
+const HERO_FOCUS_LEASH = 320;
 const WARRIOR_ADVANCE_LEASH = 240;
 const ARCHER_ADVANCE_LEASH = 135;
+const HERO_ADVANCE_LEASH = 270;
 const WARRIOR_HOLD_LEASH = 170;
 const ARCHER_HOLD_LEASH = 105;
+const HERO_HOLD_LEASH = 155;
 const WARRIOR_PROTECT_LEASH = 185;
 const ARCHER_PROTECT_LEASH = 115;
+const HERO_PROTECT_LEASH = 180;
 const WARRIOR_RETREAT_LEASH = 110;
 const ARCHER_RETREAT_LEASH = 90;
+const HERO_RETREAT_LEASH = 110;
 
 interface RoleOrderSpec {
   mode: UnitOrderMode;
@@ -42,6 +48,7 @@ interface RoleOrderSpec {
 
 interface RoleExecutionContext {
   hero: Hero;
+  heroUnit?: Unit;
   allies: Unit[];
   enemies: Unit[];
   allyCenter: Position;
@@ -60,30 +67,94 @@ export class IntentExecutor {
   ): void {
     const aliveAllies = alliedUnits.filter((unit) => unit.isAlive());
     const aliveEnemies = enemyUnits.filter((unit) => unit.isAlive());
+    const heroUnit = aliveAllies.find((unit) => unit.id === hero.state.combatUnitId);
+    const ownedAllies = aliveAllies.filter(
+      (unit) => unit.state.role !== 'hero' && unit.state.assignedHeroId === hero.state.id
+    );
+    const orderedGroupOrders = this.sortGroupOrders(decision.groupOrders);
+    const heroGroupOrder = orderedGroupOrders.find((groupOrder) => groupOrder.group === 'hero');
+    const allGroupOrder = orderedGroupOrders.find((groupOrder) => groupOrder.group === 'all');
+    const baseDecision = allGroupOrder
+      ? this.expandGroupOrder(decision, allGroupOrder)
+      : this.stripGroupOrders(decision);
+    const usesScopedGroupOrders =
+      decision.groupOrderMode === 'explicit_only' && orderedGroupOrders.length > 0 && !allGroupOrder;
 
-    const heroAnchor =
-      decision.moveTo ??
-      decision.groupOrders?.find((groupOrder) => groupOrder.group === 'all')?.moveTo;
-    if (heroAnchor) {
-      hero.setPosition(heroAnchor);
+    if (!usesScopedGroupOrders) {
+      this.applyDecisionToHeroUnit(hero, heroUnit, baseDecision, ownedAllies, aliveEnemies);
+      this.applyDecisionToUnits(hero, heroUnit, baseDecision, ownedAllies, aliveEnemies);
     }
 
-    this.applyDecisionToUnits(hero, this.stripGroupOrders(decision), aliveAllies, aliveEnemies);
+    if (heroGroupOrder) {
+      this.applyDecisionToHeroUnit(
+        hero,
+        heroUnit,
+        this.expandGroupOrder(decision, heroGroupOrder),
+        ownedAllies,
+        aliveEnemies
+      );
+    }
 
-    const orderedGroupOrders = this.sortGroupOrders(decision.groupOrders);
     for (const groupOrder of orderedGroupOrders) {
-      const groupUnits = this.selectGroupUnits(groupOrder.group, aliveAllies);
+      if (groupOrder.group === 'hero' || groupOrder.group === 'all') {
+        continue;
+      }
+
+      const groupUnits = this.selectGroupUnits(groupOrder.group, ownedAllies);
       if (groupUnits.length === 0) {
         continue;
       }
 
       const groupDecision = this.expandGroupOrder(decision, groupOrder);
-      this.applyDecisionToUnits(hero, groupDecision, groupUnits, aliveEnemies);
+      this.applyDecisionToUnits(hero, heroUnit, groupDecision, groupUnits, aliveEnemies);
     }
+  }
+
+  private applyDecisionToHeroUnit(
+    hero: Hero,
+    heroUnit: Unit | undefined,
+    decision: HeroDecision,
+    ownedAllies: Unit[],
+    enemies: Unit[]
+  ): void {
+    if (!heroUnit || !heroUnit.isAlive()) {
+      return;
+    }
+
+    const context = this.buildExecutionContext(hero, heroUnit, decision, ownedAllies, enemies);
+    let spec: RoleOrderSpec | undefined;
+
+    switch (decision.intent) {
+      case 'advance_to_point':
+        spec = this.buildHeroAdvanceSpec(decision, context);
+        break;
+      case 'focus_enemy':
+        spec = this.buildHeroFocusSpec(decision, context);
+        break;
+      case 'protect_target':
+        spec = this.buildHeroProtectSpec(decision, context);
+        break;
+      case 'retreat_to_point':
+        spec = this.buildHeroRetreatSpec(decision, context);
+        break;
+      case 'hold_position':
+        spec = this.buildHeroHoldSpec(decision, context);
+        break;
+      case 'use_skill':
+        return;
+    }
+
+    if (!spec) {
+      return;
+    }
+
+    this.applyOrder(heroUnit, spec);
+    heroUnit.state.targetId = spec.targetId;
   }
 
   private applyDecisionToUnits(
     hero: Hero,
+    heroUnit: Unit | undefined,
     decision: HeroDecision,
     allies: Unit[],
     enemies: Unit[]
@@ -92,7 +163,7 @@ export class IntentExecutor {
       return;
     }
 
-    const context = this.buildExecutionContext(hero, decision, allies, enemies);
+    const context = this.buildExecutionContext(hero, heroUnit, decision, allies, enemies);
 
     switch (decision.intent) {
       case 'advance_to_point':
@@ -117,16 +188,19 @@ export class IntentExecutor {
 
   private buildExecutionContext(
     hero: Hero,
+    heroUnit: Unit | undefined,
     decision: HeroDecision,
     allies: Unit[],
     enemies: Unit[]
   ): RoleExecutionContext {
-    const allyCenter = this.clusterCenter(allies);
+    const allyReference = allies.length > 0 ? allies : heroUnit ? [heroUnit] : [];
+    const allyCenter = this.clusterCenter(allyReference);
     const enemyCenter = enemies.length > 0 ? this.clusterCenter(enemies) : undefined;
     const anchor = decision.moveTo ?? allyCenter;
 
     return {
       hero,
+      heroUnit,
       allies,
       enemies,
       allyCenter,
@@ -143,10 +217,6 @@ export class IntentExecutor {
     const anchor = decision.moveTo ?? context.allyCenter;
     const screenPoint = this.getScreenPoint(anchor, context);
     const supportPoint = this.getSupportPoint(anchor, context);
-    const pressureTarget =
-      context.focusTarget ??
-      this.chooseWarriorPressureTarget(context, anchor) ??
-      context.nearestEnemyToAnchor;
 
     for (const ally of context.allies) {
       const spec: RoleOrderSpec =
@@ -154,7 +224,7 @@ export class IntentExecutor {
           ? {
               mode: 'advance',
               orderPoint: screenPoint,
-              targetId: decision.targetId ?? pressureTarget?.id,
+              targetId: decision.targetId,
               orderRadius: ADVANCE_RADIUS,
               orderLeashRadius: WARRIOR_ADVANCE_LEASH,
               preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
@@ -175,10 +245,7 @@ export class IntentExecutor {
   private executeFocus(decision: HeroDecision, context: RoleExecutionContext): void {
     const focusTarget =
       context.focusTarget ??
-      this.findNearestToPoint(
-        decision.moveTo ?? context.hero.state.position,
-        context.enemies
-      );
+      this.findNearestToPoint(decision.moveTo ?? context.hero.state.position, context.enemies);
     const anchor = focusTarget?.state.position ?? decision.moveTo ?? context.hero.state.position;
     const screenPoint = this.getScreenPoint(anchor, context, 40);
     const supportPoint = this.getSupportPoint(anchor, context, 76);
@@ -292,6 +359,83 @@ export class IntentExecutor {
     }
   }
 
+  private buildHeroAdvanceSpec(
+    decision: HeroDecision,
+    context: RoleExecutionContext
+  ): RoleOrderSpec {
+    const anchor = decision.moveTo ?? context.hero.state.position;
+    const point = this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET);
+
+    return {
+      mode: 'advance',
+      orderPoint: point,
+      targetId: decision.targetId,
+      orderRadius: ADVANCE_RADIUS - 30,
+      orderLeashRadius: HERO_ADVANCE_LEASH,
+      preferredTargetRole:
+        context.nearestEnemyArcher ? 'archer' : context.focusTarget?.state.role,
+    };
+  }
+
+  private buildHeroFocusSpec(decision: HeroDecision, context: RoleExecutionContext): RoleOrderSpec {
+    const focusTarget =
+      context.focusTarget ??
+      this.findNearestToPoint(decision.moveTo ?? context.hero.state.position, context.enemies);
+    const anchor = focusTarget?.state.position ?? decision.moveTo ?? context.hero.state.position;
+
+    return {
+      mode: 'focus',
+      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET),
+      targetId: focusTarget?.id,
+      orderRadius: FOCUS_RADIUS - 40,
+      orderLeashRadius: HERO_FOCUS_LEASH,
+      preferredTargetRole: focusTarget?.state.role ?? (context.nearestEnemyArcher ? 'archer' : undefined),
+    };
+  }
+
+  private buildHeroProtectSpec(
+    decision: HeroDecision,
+    context: RoleExecutionContext
+  ): RoleOrderSpec {
+    const anchor = decision.moveTo ?? context.hero.state.position;
+    const nearestThreat = this.findNearestToPoint(anchor, context.enemies);
+
+    return {
+      mode: 'protect',
+      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET - 8),
+      targetId: nearestThreat?.id,
+      orderRadius: PROTECT_RADIUS - 10,
+      orderLeashRadius: HERO_PROTECT_LEASH,
+      preferredTargetRole: nearestThreat?.state.role,
+    };
+  }
+
+  private buildHeroRetreatSpec(
+    decision: HeroDecision,
+    context: RoleExecutionContext
+  ): RoleOrderSpec {
+    const anchor = decision.moveTo ?? context.hero.state.position;
+
+    return {
+      mode: 'retreat',
+      orderPoint: this.getSupportPoint(anchor, context, 40),
+      orderRadius: RETREAT_RADIUS,
+      orderLeashRadius: HERO_RETREAT_LEASH,
+    };
+  }
+
+  private buildHeroHoldSpec(decision: HeroDecision, context: RoleExecutionContext): RoleOrderSpec {
+    const anchor = decision.moveTo ?? context.hero.state.position;
+
+    return {
+      mode: 'hold',
+      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET - 10),
+      orderRadius: HOLD_RADIUS,
+      orderLeashRadius: HERO_HOLD_LEASH,
+      preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
+    };
+  }
+
   private applyOrder(unit: Unit, spec: RoleOrderSpec): void {
     unit.state.orderMode = spec.mode;
     unit.state.orderPoint = { ...spec.orderPoint };
@@ -317,16 +461,6 @@ export class IntentExecutor {
   ): Position {
     const threat = context.focusTarget?.state.position ?? context.enemyCenter;
     return threat ? this.projectPoint(anchor, threat, -distance) : { ...anchor };
-  }
-
-  private chooseWarriorPressureTarget(
-    context: RoleExecutionContext,
-    anchor: Position
-  ): Unit | undefined {
-    return (
-      this.findNearestEnemyByRole(anchor, context.enemies, 'archer') ??
-      this.findNearestToPoint(anchor, context.enemies)
-    );
   }
 
   private findNearestEnemyByRole(
@@ -398,6 +532,7 @@ export class IntentExecutor {
 
     const groupPriority: Record<UnitGroup, number> = {
       all: 0,
+      hero: 1,
       warriors: 1,
       archers: 1,
     };
@@ -409,6 +544,8 @@ export class IntentExecutor {
     switch (group) {
       case 'all':
         return allies;
+      case 'hero':
+        return [];
       case 'warriors':
         return allies.filter((unit) => unit.state.role === 'warrior');
       case 'archers':

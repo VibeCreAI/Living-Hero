@@ -17,7 +17,7 @@ export function buildContextPrompt(
   const scenarioLine =
     summary.mode === 'playground'
       ? 'Playground drill with passive targets. No hostile enemies are present.'
-      : 'Live battle.';
+      : 'Live battle. You fight as a frontline hero while commanding your assigned troops.';
 
   const allies = summary.nearbyAllies
     .filter((u) => u.state !== 'dead')
@@ -50,6 +50,7 @@ export function buildContextPrompt(
 - Mode: ${summary.mode}
 - Scenario: ${scenarioLine}
 - Your position: (${Math.round(summary.heroState.position.x)}, ${Math.round(summary.heroState.position.y)})
+- Your combat status: ${formatHeroStatus(summary)}
 
 ALLIED UNITS (${summary.nearbyAllies.filter((u) => u.state !== 'dead').length} alive):
 ${allies || '  (none)'}
@@ -93,6 +94,14 @@ ${parsedDirective.groupOrders.map((groupOrder) => formatDirectiveGroupHint(group
   }
 
   return prompt;
+}
+
+function formatHeroStatus(summary: HeroSummary): string {
+  if (!summary.heroUnit) {
+    return 'combat unit unavailable';
+  }
+
+  return `HP:${summary.heroUnit.hp}/${summary.heroUnit.maxHp} ${summary.heroUnit.state}`;
 }
 
 function formatDirectiveGroupHint(groupOrder: {

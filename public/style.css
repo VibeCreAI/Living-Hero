@@ -23,6 +23,33 @@ body {
     align-items: center;
 }
 
+#scene-shell {
+    position: relative;
+    width: 1024px;
+    height: 768px;
+}
+
+#battle-shell {
+    position: relative;
+    width: 1348px;
+    height: 948px;
+}
+
+#game-stage {
+    position: relative;
+    width: 1024px;
+    height: 768px;
+}
+
+#game-container {
+    width: 1024px;
+    height: 768px;
+}
+
+#game-container canvas {
+    display: block;
+}
+
 .spritePosition {
     margin: 10px 0 0 10px;
     font-size: 0.8em;

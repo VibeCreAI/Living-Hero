@@ -1,5 +1,12 @@
 import { Scene } from 'phaser';
-import { UnitRole, Position, BattleResult, BattleState, BattleMode } from '../types';
+import {
+  UnitRole,
+  Position,
+  BattleResult,
+  BattleState,
+  BattleMode,
+  PlayerChatMessageEvent,
+} from '../types';
 import { Unit, createUnitState } from '../entities/Unit';
 import { Hero, createHeroState } from '../entities/Hero';
 import { BattleStateManager } from '../state/BattleState';
@@ -84,8 +91,10 @@ export class BattleLoop {
     this.stopHealthChecks = this.ollamaBrain.startHealthChecks();
   }
 
-  setPlayerDirective(directive: string): void {
-    this.heroScheduler.setPlayerDirective(directive);
+  setPlayerDirective(event: PlayerChatMessageEvent): void {
+    const targetHeroIds =
+      event.targetHeroIds.length > 0 ? event.targetHeroIds : this.heroes.map((hero) => hero.state.id);
+    this.heroScheduler.setPlayerDirective(event.text, targetHeroIds);
     if (this.mode === 'battle' && this.stateManager.getState().phase === 'init') {
       this.planningRequested = true;
     }
@@ -114,6 +123,7 @@ export class BattleLoop {
     this.movementSystem.setObstacles(this.obstacleSystem);
     this.combatSystem.setObstacles(this.obstacleSystem);
 
+    this.spawnHero(scene);
     this.spawnAlliedArmy(scene);
 
     if (this.mode === 'playground') {
@@ -122,7 +132,6 @@ export class BattleLoop {
       this.spawnEnemyArmy(scene, config.difficulty);
     }
 
-    this.spawnHero(scene);
     this.heroScheduler.setTerrainDescription(this.buildTerrainDescription());
 
     this.stateManager.init(
@@ -140,15 +149,10 @@ export class BattleLoop {
 
     if (state.phase === 'init') {
       if (this.shouldProcessPlanning()) {
-        this.heroScheduler.update(
-          0,
-          this.heroes,
-          state,
-          this.alliedUnits,
-          this.enemyUnits
-        );
+        this.heroScheduler.update(dt, this.heroes, state, this.alliedUnits, this.enemyUnits);
       }
 
+      this.syncVisuals();
       this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
       return null;
     }
@@ -159,13 +163,7 @@ export class BattleLoop {
 
     this.stateManager.updateTime(dt);
 
-    this.heroScheduler.update(
-      dt,
-      this.heroes,
-      this.stateManager.getState(),
-      this.alliedUnits,
-      this.enemyUnits
-    );
+    this.heroScheduler.update(dt, this.heroes, this.stateManager.getState(), this.alliedUnits, this.enemyUnits);
     this.movementSystem.update(this.alliedUnits, this.enemyUnits, dt);
     this.targetingSystem.update(this.alliedUnits, this.enemyUnits);
     const damageEvents = this.combatSystem.update(
@@ -176,14 +174,9 @@ export class BattleLoop {
     );
     this.stateManager.recordDamage(damageEvents);
 
-    for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
-      unit.syncVisuals();
-    }
+    this.syncVisuals();
 
-    this.feedbackOverlay?.showDamageEvents(
-      damageEvents,
-      [...this.alliedUnits, ...this.enemyUnits]
-    );
+    this.feedbackOverlay?.showDamageEvents(damageEvents, [...this.alliedUnits, ...this.enemyUnits]);
     this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
 
     return this.winConditionCheck();
@@ -202,9 +195,7 @@ export class BattleLoop {
       return true;
     }
 
-    return this.heroes.some(
-      (hero) => Boolean(hero.state.currentDirective || hero.state.currentDecision)
-    );
+    return this.heroes.some((hero) => Boolean(hero.state.currentDirective || hero.state.currentDecision));
   }
 
   private initObstacles(scene: Scene): void {
@@ -221,11 +212,29 @@ export class BattleLoop {
     this.obstacleSystem.init(scene);
   }
 
+  private spawnHero(scene: Scene): void {
+    const heroConfig = DEFAULT_HEROES[0];
+    const heroSpawn = this.layout.heroSpawn ?? { x: 60, y: 380 };
+    const heroPosition = this.clampToArena(heroSpawn);
+    const heroUnitState = createUnitState('allied', 'hero', heroPosition, {
+      displayName: heroConfig.name,
+      assignedHeroId: heroConfig.id,
+    });
+    const heroUnit = new Unit(scene, heroUnitState);
+    heroUnit.labelText?.destroy();
+    heroUnit.labelText = undefined;
+    this.alliedUnits.push(heroUnit);
+
+    const heroState = createHeroState(heroConfig, heroUnit.id, heroPosition);
+    this.heroes.push(new Hero(scene, heroState, heroUnit));
+  }
+
   private spawnAlliedArmy(scene: Scene): void {
     const alliedComposition: ArmyComposition[] = [
       { role: 'warrior', count: 3 },
       { role: 'archer', count: 2 },
     ];
+    const ownerHeroId = this.heroes[0]?.state.id;
 
     let yOffset = 200;
     let spawnIndex = 0;
@@ -236,7 +245,9 @@ export class BattleLoop {
           this.layout.alliedSpawns && this.layout.alliedSpawns.length > 0
             ? this.resolveSpawnPosition(this.layout.alliedSpawns, spawnIndex++)
             : fallbackPosition;
-        const state = createUnitState('allied', composition.role, position);
+        const state = createUnitState('allied', composition.role, position, {
+          assignedHeroId: ownerHeroId,
+        });
         this.alliedUnits.push(new Unit(scene, state));
       }
       yOffset += composition.count * 100 + 30;
@@ -288,13 +299,6 @@ export class BattleLoop {
     }
   }
 
-  private spawnHero(scene: Scene): void {
-    const heroConfig = DEFAULT_HEROES[0];
-    const heroSpawn = this.layout.heroSpawn ?? { x: 60, y: 380 };
-    const heroState = createHeroState(heroConfig, this.clampToArena(heroSpawn));
-    this.heroes.push(new Hero(scene, heroState));
-  }
-
   private buildTerrainDescription(): string {
     if (this.mode !== 'playground') {
       return this.obstacleSystem.describe();
@@ -318,6 +322,12 @@ ${targets}`;
       return null;
     }
 
+    const heroAlive = this.heroes.every((hero) => this.getHeroCombatUnit(hero)?.isAlive() === true);
+    if (!heroAlive) {
+      this.stateManager.setPhase('ended');
+      return 'enemy_win';
+    }
+
     const alliedAlive = this.alliedUnits.some((unit) => unit.isAlive());
     const enemyAlive = this.enemyUnits.some((unit) => unit.isAlive());
 
@@ -338,11 +348,11 @@ ${targets}`;
     this.feedbackOverlay?.destroy();
     this.obstacleSystem.destroy();
 
-    for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
-      unit.destroy();
-    }
     for (const hero of this.heroes) {
       hero.destroy();
+    }
+    for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
+      unit.destroy();
     }
 
     this.alliedUnits = [];
@@ -351,6 +361,19 @@ ${targets}`;
     this.mode = 'battle';
     this.planningRequested = false;
     this.layout = {};
+  }
+
+  private syncVisuals(): void {
+    for (const unit of [...this.alliedUnits, ...this.enemyUnits]) {
+      unit.syncVisuals();
+    }
+    for (const hero of this.heroes) {
+      hero.syncVisuals();
+    }
+  }
+
+  private getHeroCombatUnit(hero: Hero): Unit | undefined {
+    return this.alliedUnits.find((unit) => unit.id === hero.state.combatUnitId);
   }
 
   private resolveSpawnPosition(spawns: Position[], index: number): Position {

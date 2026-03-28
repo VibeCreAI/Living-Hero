@@ -13,6 +13,9 @@ export class BootScene extends Scene {
     this.load.spritesheet('blue-archer-run', 'assets/Units/Blue Units/Archer/Archer_Run.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('blue-archer-attack', 'assets/Units/Blue Units/Archer/Archer_Shoot.png', { frameWidth: 192, frameHeight: 192 });
     this.load.image('blue-archer-arrow', 'assets/Units/Blue Units/Archer/Arrow.png');
+    this.load.spritesheet('blue-hero-idle', 'assets/Units/Hero Units/Hero1_Idle.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('blue-hero-run', 'assets/Units/Hero Units/Hero1_Run.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('blue-hero-attack', 'assets/Units/Hero Units/Hero1_Attack.png', { frameWidth: 128, frameHeight: 128 });
 
     this.load.spritesheet('red-warrior-idle', 'assets/Units/Red Units/Warrior/Warrior_Idle.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('red-warrior-run', 'assets/Units/Red Units/Warrior/Warrior_Run.png', { frameWidth: 192, frameHeight: 192 });
@@ -63,6 +66,9 @@ export class BootScene extends Scene {
     this.anims.create({ key: 'blue-archer-idle-anim', frames: this.anims.generateFrameNumbers('blue-archer-idle', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'blue-archer-run-anim', frames: this.anims.generateFrameNumbers('blue-archer-run', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'blue-archer-attack-anim', frames: this.anims.generateFrameNumbers('blue-archer-attack', { start: 0, end: 7 }), frameRate: 8, repeat: 0 });
+    this.anims.create({ key: 'blue-hero-idle-anim', frames: this.anims.generateFrameNumbers('blue-hero-idle', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: 'blue-hero-run-anim', frames: this.anims.generateFrameNumbers('blue-hero-run', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: 'blue-hero-attack-anim', frames: this.anims.generateFrameNumbers('blue-hero-attack', { start: 0, end: 3 }), frameRate: 8, repeat: 0 });
 
     this.anims.create({ key: 'red-warrior-idle-anim', frames: this.anims.generateFrameNumbers('red-warrior-idle', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'red-warrior-run-anim', frames: this.anims.generateFrameNumbers('red-warrior-run', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });

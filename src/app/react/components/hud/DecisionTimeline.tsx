@@ -4,14 +4,16 @@ import { BattleState, GroupOrder, HeroDecision, Position, UnitGroup } from '../.
 
 interface DecisionEntry {
   timeSec: number;
+  heroName: string;
   directive: string;
   rationale: string;
   armyPlan: string;
+  heroPlan: string;
   warriorPlan: string;
   archerPlan: string;
 }
 
-export function DecisionTimeline() {
+export function DecisionTimeline({ activeHeroId }: { activeHeroId: string | null }) {
   const [entries, setEntries] = useState<DecisionEntry[]>([]);
   const lastDecisionKeyRef = useRef('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -22,7 +24,8 @@ export function DecisionTimeline() {
         return;
       }
 
-      const hero = state.heroes[0];
+      const hero =
+        state.heroes.find((candidate) => candidate.id === activeHeroId) ?? state.heroes[0];
       const decision = hero.currentDecision;
       if (!decision) {
         return;
@@ -31,12 +34,15 @@ export function DecisionTimeline() {
       const unitLookup = buildUnitLookup(state);
       const directive = hero.currentDirective ?? 'none';
       const armyPlan = formatPlan(decision, unitLookup);
+      const heroPlan = formatGroupPlan(decision, 'hero', unitLookup);
       const warriorPlan = formatGroupPlan(decision, 'warriors', unitLookup);
       const archerPlan = formatGroupPlan(decision, 'archers', unitLookup);
       const decisionKey = [
+        hero.id,
         directive,
         decision.rationaleTag,
         armyPlan,
+        heroPlan,
         warriorPlan,
         archerPlan,
       ].join('|');
@@ -50,9 +56,11 @@ export function DecisionTimeline() {
         ...prev.slice(-15),
         {
           timeSec: state.timeSec,
+          heroName: hero.name,
           directive,
           rationale: decision.rationaleTag.replace(/_/g, ' '),
           armyPlan,
+          heroPlan,
           warriorPlan,
           archerPlan,
         },
@@ -63,7 +71,7 @@ export function DecisionTimeline() {
     return () => {
       EventBus.removeListener('battle-state-update', handler);
     };
-  }, []);
+  }, [activeHeroId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -119,10 +127,12 @@ export function DecisionTimeline() {
           >
             <div style={{ color: '#aaa', marginBottom: '2px' }}>
               <span style={{ color: '#666' }}>[{entry.timeSec.toFixed(1)}s]</span>{' '}
+              <span style={{ color: '#9ec7d8' }}>{entry.heroName}</span>{' '}
               <span style={{ color: '#ffd700' }}>{entry.rationale}</span>
             </div>
             <DetailRow label="Directive" value={entry.directive} color="#9ec7d8" />
             <DetailRow label="Army" value={entry.armyPlan} color="#ffd700" />
+            <DetailRow label="Hero" value={entry.heroPlan} color="#f3c86b" />
             <DetailRow label="Warriors" value={entry.warriorPlan} color="#ff9d66" />
             <DetailRow label="Archers" value={entry.archerPlan} color="#8fc7ff" />
           </div>
@@ -173,9 +183,34 @@ function formatGroupOrder(groupOrder: GroupOrder, unitLookup: Map<string, string
 }
 
 function formatPlan(
-  decision: Pick<HeroDecision, 'intent' | 'targetId' | 'moveTo'>,
+  decision:
+    | Pick<HeroDecision, 'intent' | 'targetId' | 'moveTo' | 'groupOrders' | 'groupOrderMode'>
+    | Pick<GroupOrder, 'group' | 'intent' | 'targetId' | 'moveTo'>,
   unitLookup: Map<string, string>
 ): string {
+  if ('group' in decision && decision.group === 'all') {
+    return formatPlan(
+      {
+        intent: decision.intent,
+        targetId: decision.targetId,
+        moveTo: decision.moveTo,
+      },
+      unitLookup
+    );
+  }
+
+  if (
+    !('group' in decision) &&
+    decision.groupOrderMode === 'explicit_only' &&
+    decision.groupOrders?.length
+  ) {
+    const allGroupOrder = decision.groupOrders.find((candidate) => candidate.group === 'all');
+    if (allGroupOrder) {
+      return formatPlan(allGroupOrder, unitLookup);
+    }
+    return 'unchanged';
+  }
+
   const parts = [decision.intent.replace(/_/g, ' ')];
   if (decision.targetId) {
     parts.push(`target ${formatTarget(decision.targetId, unitLookup)}`);

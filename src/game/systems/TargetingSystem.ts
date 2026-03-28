@@ -3,6 +3,8 @@ import { Position } from '../types';
 
 const HOLD_ENGAGE_BUFFER = 28;
 const ROLE_PREFERENCE_BONUS = 70;
+const ADVANCE_ARRIVAL_BUFFER = 20;
+const ADVANCE_ARRIVAL_RADIUS_FACTOR = 0.45;
 
 export class TargetingSystem {
   update(alliedUnits: Unit[], enemyUnits: Unit[]): void {
@@ -101,6 +103,10 @@ export class TargetingSystem {
         }
       }
 
+      if (!this.hasReachedAdvanceAnchor(unit)) {
+        return undefined;
+      }
+
       return this.findBestTarget(unit, opponents, (opponent) =>
         this.isWithinPursuitEnvelope(unit, opponent)
       );
@@ -113,7 +119,10 @@ export class TargetingSystem {
     if (
       unit.state.orderMode === 'hold' ||
       unit.state.orderMode === 'protect' ||
-      unit.state.orderMode === 'retreat'
+      unit.state.orderMode === 'retreat' ||
+      (unit.state.orderMode === 'advance' &&
+        !unit.state.orderTargetId &&
+        !this.hasReachedAdvanceAnchor(unit))
     ) {
       return true;
     }
@@ -152,7 +161,10 @@ export class TargetingSystem {
     }
 
     if (orderMode === 'advance') {
-      return this.isWithinPursuitEnvelope(unit, target);
+      return (
+        (Boolean(unit.state.orderTargetId) || this.hasReachedAdvanceAnchor(unit)) &&
+        this.isWithinPursuitEnvelope(unit, target)
+      );
     }
 
     return true;
@@ -200,6 +212,24 @@ export class TargetingSystem {
 
     return this.distance(unit.state.position, target.state.position) <=
       unit.state.attackRange + HOLD_ENGAGE_BUFFER;
+  }
+
+  private hasReachedAdvanceAnchor(unit: Unit): boolean {
+    if (unit.state.orderMode !== 'advance') {
+      return true;
+    }
+
+    const orderPoint = unit.state.orderPoint;
+    if (!orderPoint) {
+      return true;
+    }
+
+    const orderRadius = unit.state.orderRadius ?? 0;
+    const arrivalRadius = Math.max(
+      ADVANCE_ARRIVAL_BUFFER,
+      orderRadius * ADVANCE_ARRIVAL_RADIUS_FACTOR
+    );
+    return this.distance(unit.state.position, orderPoint) <= arrivalRadius;
   }
 
   private distance(a: Position, b: Position): number {

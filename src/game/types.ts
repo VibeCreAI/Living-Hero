@@ -1,15 +1,15 @@
-// ── Position ──
+// Position
 export interface Position {
   x: number;
   y: number;
 }
 
-// ── Unit types ──
+// Unit types
 export type UnitFaction = 'allied' | 'enemy';
-export type UnitRole = 'warrior' | 'archer';
+export type UnitRole = 'warrior' | 'archer' | 'hero';
 export type UnitAnimState = 'idle' | 'moving' | 'attacking' | 'dead';
 export type UnitOrderMode = 'advance' | 'focus' | 'hold' | 'protect' | 'retreat';
-export type UnitGroup = 'all' | 'warriors' | 'archers';
+export type UnitGroup = 'all' | 'hero' | 'warriors' | 'archers';
 
 export interface UnitConfig {
   role: UnitRole;
@@ -17,7 +17,7 @@ export interface UnitConfig {
   attack: number;
   attackRange: number;
   attackSpeed: number; // attacks per second
-  moveSpeed: number;   // pixels per second
+  moveSpeed: number; // pixels per second
 }
 
 export interface UnitState {
@@ -25,6 +25,7 @@ export interface UnitState {
   faction: UnitFaction;
   role: UnitRole;
   displayName?: string;
+  assignedHeroId?: string;
   position: Position;
   hp: number;
   maxHp: number;
@@ -44,13 +45,13 @@ export interface UnitState {
   state: UnitAnimState;
 }
 
-// ── Hero types ──
+// Hero types
 export interface HeroTraits {
   intelligence: number; // 0-1: candidate breadth + target quality
-  discipline: number;   // 0-1: how closely hero follows commands
-  boldness: number;     // 0-1: aggression level
-  caution: number;      // 0-1: risk avoidance
-  empathy: number;      // 0-1: protecting allies vs chasing enemies
+  discipline: number; // 0-1: how closely hero follows commands
+  boldness: number; // 0-1: aggression level
+  caution: number; // 0-1: risk avoidance
+  empathy: number; // 0-1: protecting allies vs chasing enemies
   decisiveness: number; // 0-1: commitment duration (less flip-flopping)
 }
 
@@ -63,13 +64,14 @@ export interface HeroConfig {
 export interface HeroState {
   id: string;
   name: string;
+  combatUnitId: string;
   position: Position;
   currentDirective?: string;
   currentDecision?: HeroDecision;
   traits: HeroTraits;
 }
 
-// ── Command types ──
+// Command types
 export type CommandType = 'protect' | 'hold' | 'advance' | 'focus';
 
 export interface PlayerCommand {
@@ -77,7 +79,7 @@ export interface PlayerCommand {
   targetId?: string;
 }
 
-// ── AI types ──
+// AI types
 export type IntentType =
   | 'hold_position'
   | 'advance_to_point'
@@ -99,6 +101,7 @@ export interface HeroDecision {
   moveTo?: Position;
   skillId?: string;
   groupOrders?: GroupOrder[];
+  groupOrderMode?: 'override' | 'explicit_only';
   priority: 'low' | 'medium' | 'high';
   rationaleTag: string;
   recheckInSec: number;
@@ -127,6 +130,7 @@ export interface BattleObstacle {
 export interface HeroSummary {
   mode: BattleMode;
   heroState: HeroState;
+  heroUnit?: UnitState;
   currentDirective?: string;
   nearbyAllies: UnitState[];
   nearbyEnemies: UnitState[];
@@ -136,7 +140,7 @@ export interface HeroSummary {
   timeSec: number;
 }
 
-// ── Battle types ──
+// Battle types
 export type BattleMode = 'battle' | 'playground';
 export type BattlePhase = 'init' | 'active' | 'ended';
 
@@ -153,7 +157,18 @@ export interface BattleState {
 
 export type BattleResult = 'allied_win' | 'enemy_win' | null;
 
-// ── Skill types (placeholder) ──
+export interface PlayerChatMessageEvent {
+  text: string;
+  targetHeroIds: string[];
+}
+
+export interface HeroChatEvent {
+  heroId: string;
+  heroName: string;
+  message: string;
+}
+
+// Skill types (placeholder)
 export interface SkillConfig {
   id: string;
   name: string;
@@ -162,7 +177,7 @@ export interface SkillConfig {
   cooldown: number;
 }
 
-// ── Overworld types ──
+// Overworld types
 export interface OverworldNode {
   id: string;
   position: Position;

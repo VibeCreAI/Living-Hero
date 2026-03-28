@@ -27,10 +27,10 @@
     "windows": [
       {
         "title": "Living Heros",
-        "width": 1024,
-        "height": 768,
-        "minWidth": 1024,
-        "minHeight": 768,
+        "width": 1348,
+        "height": 948,
+        "minWidth": 1348,
+        "minHeight": 948,
         "resizable": true,
         "fullscreen": false,
         "devtools": true

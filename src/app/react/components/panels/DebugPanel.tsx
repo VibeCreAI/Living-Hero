@@ -15,6 +15,7 @@ interface DebugData {
   targetId: string;
   moveTo: string;
   armyPlan: string;
+  heroPlan: string;
   warriorPlan: string;
   archerPlan: string;
   unitOrder: string;
@@ -24,7 +25,7 @@ interface DebugData {
   recentHit: string;
 }
 
-export function DebugPanel() {
+export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
   const [visible, setVisible] = useState(false);
   const [data, setData] = useState<DebugData | null>(null);
 
@@ -32,7 +33,8 @@ export function DebugPanel() {
     const handler = (state: BattleState) => {
       if (!visible || state.heroes.length === 0) return;
 
-      const hero = state.heroes[0];
+      const hero =
+        state.heroes.find((candidate) => candidate.id === activeHeroId) ?? state.heroes[0];
       const decision = hero.currentDecision;
       const firstAlly = state.alliedUnits.find((u) => u.state !== 'dead');
       const firstWarrior = state.alliedUnits.find((u) => u.state !== 'dead' && u.role === 'warrior');
@@ -56,6 +58,7 @@ export function DebugPanel() {
           ? `(${Math.round(decision.moveTo.x)}, ${Math.round(decision.moveTo.y)})`
           : 'none',
         armyPlan: formatArmyPlan(decision),
+        heroPlan: formatGroupPlan(decision, 'hero'),
         warriorPlan: formatGroupPlan(decision, 'warriors'),
         archerPlan: formatGroupPlan(decision, 'archers'),
         unitOrder: firstAlly?.orderMode ?? 'none',
@@ -82,7 +85,7 @@ export function DebugPanel() {
       EventBus.removeListener('battle-state-update', handler);
       window.removeEventListener('keydown', keyHandler);
     };
-  }, [visible]);
+  }, [activeHeroId, visible]);
 
   if (!visible) {
     return (
@@ -111,6 +114,7 @@ export function DebugPanel() {
     ['Target', data.targetId],
     ['MoveTo', data.moveTo],
     ['ArmyPlan', data.armyPlan],
+    ['HeroPlan', data.heroPlan],
     ['WarPlan', data.warriorPlan],
     ['ArcPlan', data.archerPlan],
     ['UnitOrder', data.unitOrder],
@@ -172,6 +176,14 @@ export function DebugPanel() {
 function formatArmyPlan(decision?: HeroDecision): string {
   if (!decision) {
     return 'none';
+  }
+
+  if (decision.groupOrderMode === 'explicit_only' && decision.groupOrders?.length) {
+    const allGroupOrder = decision.groupOrders.find((groupOrder) => groupOrder.group === 'all');
+    if (allGroupOrder) {
+      return formatPlan(allGroupOrder.intent, allGroupOrder.targetId, allGroupOrder.moveTo);
+    }
+    return 'unchanged';
   }
 
   return formatPlan(decision.intent, decision.targetId, decision.moveTo);

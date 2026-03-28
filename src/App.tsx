@@ -6,6 +6,7 @@ import { BattleHUD } from './app/react/components/hud/BattleHUD';
 function App() {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
   const [sceneKey, setSceneKey] = useState<string>('');
+  const isBattleScene = sceneKey === 'BattleScene';
 
   const currentScene = (scene: Phaser.Scene) => {
     setSceneKey(scene.scene.key);
@@ -13,10 +14,12 @@ function App() {
 
   return (
     <div id="app">
-      <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-      <div>
-        {sceneKey === 'OverworldScene' && <OverworldHUD />}
-        {sceneKey === 'BattleScene' && <BattleHUD />}
+      <div id={isBattleScene ? 'battle-shell' : 'scene-shell'}>
+        <div id="game-stage">
+          <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
+          {sceneKey === 'OverworldScene' && <OverworldHUD />}
+        </div>
+        {isBattleScene && <BattleHUD />}
       </div>
     </div>
   );

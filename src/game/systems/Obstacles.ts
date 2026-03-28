@@ -10,6 +10,8 @@ export interface ObstacleInitOptions {
   showLabels?: boolean;
 }
 
+export const OBSTACLE_CLEARANCE = 10;
+
 interface GridCell {
   col: number;
   row: number;
@@ -50,8 +52,8 @@ class MeshPoint {
 
 const MAP_WIDTH = 1024;
 const MAP_HEIGHT = 768;
-const GRID_SIZE = 24;
-const PATH_PADDING = 14;
+const GRID_SIZE = 16;
+const PATH_PADDING = OBSTACLE_CLEARANCE;
 const SEGMENT_STEP = 8;
 const NAVMESH_PROJECTION_LIMIT = GRID_SIZE * 4;
 const MIN_WAYPOINT_GAP = 4;
@@ -220,6 +222,11 @@ export class ObstacleSystem {
     }
 
     return resolved;
+  }
+
+  findNearestNavigablePoint(pos: Position): Position {
+    const meshPoint = this.resolveMeshPoint(pos);
+    return meshPoint ?? this.pushOut(pos);
   }
 
   findPath(from: Position, target: Position): Position[] | null {

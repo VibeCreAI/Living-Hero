@@ -30,14 +30,8 @@ const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
 
 export class OverworldScene extends Scene {
-  private heroRing!: Phaser.GameObjects.Arc;
-  private heroPulse!: Phaser.GameObjects.Arc;
-  private heroPortraitShadow!: Phaser.GameObjects.Arc;
-  private heroPortraitFrame!: Phaser.GameObjects.Arc;
-  private heroPortrait!: Phaser.GameObjects.Image;
+  private heroSprite!: Phaser.GameObjects.Sprite;
   private heroNameText!: Phaser.GameObjects.Text;
-  private heroPortraitMaskSource!: Phaser.GameObjects.Graphics;
-  private heroPortraitMask!: Phaser.Display.Masks.GeometryMask;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private promptText!: Phaser.GameObjects.Text;
   private nearNode: OverworldNode | null = null;
@@ -96,44 +90,13 @@ export class OverworldScene extends Scene {
         .setOrigin(0.5);
     }
 
-    this.heroRing = this.add.circle(this.heroPos.x, this.heroPos.y, 22);
-    this.heroRing.setStrokeStyle(2, 0xf5d06b, 0.95);
-    this.heroRing.setFillStyle(0x000000, 0);
-    this.heroRing.setDepth(4);
-
-    this.heroPulse = this.add.circle(this.heroPos.x, this.heroPos.y, 22);
-    this.heroPulse.setStrokeStyle(1.5, 0xf5d06b, 0.45);
-    this.heroPulse.setFillStyle(0x000000, 0);
-    this.heroPulse.setDepth(4);
-    this.tweens.add({
-      targets: this.heroPulse,
-      scaleX: 1.45,
-      scaleY: 1.45,
-      alpha: 0,
-      duration: 1200,
-      ease: 'Sine.Out',
-      repeat: -1,
-    });
-
-    this.heroPortraitShadow = this.add.circle(this.heroPos.x, this.heroPos.y - 50, 18, 0x000000, 0.35);
-    this.heroPortraitShadow.setDepth(5);
-
-    this.heroPortraitFrame = this.add.circle(this.heroPos.x, this.heroPos.y - 52, 18, 0x1b2733, 1);
-    this.heroPortraitFrame.setStrokeStyle(2, 0xf5d06b, 1);
-    this.heroPortraitFrame.setDepth(6);
-
-    this.heroPortrait = this.add.image(this.heroPos.x, this.heroPos.y - 52, 'commander-portrait');
-    this.heroPortrait.setDisplaySize(30, 30);
-    this.heroPortrait.setDepth(7);
-
-    this.heroPortraitMaskSource = this.add.graphics({ x: 0, y: 0 });
-    this.heroPortraitMaskSource.setVisible(false);
-    this.heroPortraitMask = this.heroPortraitMaskSource.createGeometryMask();
-    this.heroPortrait.setMask(this.heroPortraitMask);
-    this.updateHeroPortraitMask();
+    this.heroSprite = this.add.sprite(this.heroPos.x, this.heroPos.y, 'blue-hero-idle');
+    this.heroSprite.setScale(0.75);
+    this.heroSprite.setDepth(5.2);
+    this.heroSprite.play('blue-hero-idle-anim');
 
     this.heroNameText = this.add
-      .text(this.heroPos.x, this.heroPos.y - 26, 'Commander', {
+      .text(this.heroPos.x, this.heroPos.y - 78, 'Commander', {
         fontSize: '11px',
         color: '#f7e08c',
         fontFamily: '"NeoDunggeunmoPro", monospace',
@@ -160,14 +123,6 @@ export class OverworldScene extends Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    this.add
-      .text(512, 740, 'Arrow keys to move | SPACE to enter node', {
-        fontSize: '11px',
-        color: '#aaaaaa',
-        fontFamily: '"NeoDunggeunmoPro", monospace',
-      })
-      .setOrigin(0.5);
-
     EventBus.emit('current-scene-ready', this);
   }
 
@@ -193,13 +148,14 @@ export class OverworldScene extends Scene {
     this.heroPos.x = Phaser.Math.Clamp(this.heroPos.x, MAP_PADDING, WORLD_WIDTH - MAP_PADDING);
     this.heroPos.y = Phaser.Math.Clamp(this.heroPos.y, MAP_PADDING, WORLD_HEIGHT - MAP_PADDING);
 
-    this.heroRing.setPosition(this.heroPos.x, this.heroPos.y);
-    this.heroPulse.setPosition(this.heroPos.x, this.heroPos.y);
-    this.heroPortraitShadow.setPosition(this.heroPos.x, this.heroPos.y - 50);
-    this.heroPortraitFrame.setPosition(this.heroPos.x, this.heroPos.y - 52);
-    this.heroPortrait.setPosition(this.heroPos.x, this.heroPos.y - 52);
-    this.heroNameText.setPosition(this.heroPos.x, this.heroPos.y - 28);
-    this.updateHeroPortraitMask();
+    this.heroSprite.setPosition(this.heroPos.x, this.heroPos.y);
+    this.heroNameText.setPosition(this.heroPos.x, this.heroPos.y - 78);
+    if (dx !== 0 || dy !== 0) {
+      this.heroSprite.play('blue-hero-run-anim', true);
+      this.heroSprite.setFlipX(dx < 0);
+    } else {
+      this.heroSprite.play('blue-hero-idle-anim', true);
+    }
 
     this.nearNode = null;
     for (const node of this.overworldNodes) {
@@ -285,12 +241,6 @@ export class OverworldScene extends Scene {
     const name = typeof object.name === 'string' ? object.name.trim().toLowerCase() : '';
     const target = expected.toLowerCase();
     return type === target || name === target;
-  }
-
-  private updateHeroPortraitMask(): void {
-    this.heroPortraitMaskSource.clear();
-    this.heroPortraitMaskSource.fillStyle(0xffffff);
-    this.heroPortraitMaskSource.fillCircle(this.heroPos.x, this.heroPos.y - 52, 15);
   }
 
   private spawnDecorations(placements: TerrainDecorPlacement[]): void {

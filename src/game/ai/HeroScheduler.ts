@@ -19,7 +19,7 @@ export class HeroScheduler {
   private baseDecisions: Map<string, HeroDecision> = new Map();
   private queuedResults: Map<string, QueuedDecisionResult> = new Map();
   private reactiveLocks: Map<string, ReactiveDecisionLock> = new Map();
-  private pendingDirective: string | undefined;
+  private pendingDirectives: Map<string, string> = new Map();
   private terrainDescription: string | undefined;
 
   constructor(
@@ -31,9 +31,9 @@ export class HeroScheduler {
     this.intentExecutor = new IntentExecutor();
   }
 
-  setPlayerDirective(directive: string): void {
-    this.pendingDirective = directive;
-    for (const [heroId] of this.timers) {
+  setPlayerDirective(directive: string, targetHeroIds: string[]): void {
+    for (const heroId of targetHeroIds) {
+      this.pendingDirectives.set(heroId, directive);
       this.timers.set(heroId, Infinity);
     }
   }
@@ -49,11 +49,10 @@ export class HeroScheduler {
     alliedUnits: Unit[],
     enemyUnits: Unit[]
   ): void {
-    const incomingDirective = this.pendingDirective;
-    let directiveConsumed = !incomingDirective;
-
     for (const hero of heroes) {
       const heroId = hero.state.id;
+      const incomingDirective = this.pendingDirectives.get(heroId);
+      let directiveConsumed = !incomingDirective;
       if (incomingDirective) {
         hero.setDirective(incomingDirective);
         this.baseDecisions.delete(heroId);
@@ -83,6 +82,7 @@ export class HeroScheduler {
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
         if (queuedChatResponse) {
+          hero.setSpeech(queuedChatResponse);
           EventBus.emit('hero-chat-response', {
             heroId,
             heroName: hero.state.name,
@@ -106,7 +106,7 @@ export class HeroScheduler {
       if (this.ollamaBrain) {
         this.pendingHeroes.add(heroId);
         const directive = incomingDirective;
-        directiveConsumed = true;
+        directiveConsumed = !directive ? directiveConsumed : true;
         const requestVersion = (this.requestVersions.get(heroId) ?? 0) + 1;
         this.requestVersions.set(heroId, requestVersion);
 
@@ -141,7 +141,7 @@ export class HeroScheduler {
           });
       } else {
         const directive = incomingDirective;
-        directiveConsumed = true;
+        directiveConsumed = !directive ? directiveConsumed : true;
         const decision = directive
           ? interpretPlayerMessage(summary, directive, this.terrainDescription)
             ?? this.decisionProvider.decide(summary)
@@ -156,22 +156,28 @@ export class HeroScheduler {
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
         if (directive) {
+          const response = this.buildFallbackAck(activeDecision);
+          hero.setSpeech(response);
           EventBus.emit('hero-chat-response', {
             heroId,
             heroName: hero.state.name,
-            message: this.buildFallbackAck(activeDecision),
+            message: response,
           });
         }
         this.timers.set(heroId, 0);
       }
-    }
 
-    this.pendingDirective = directiveConsumed ? undefined : incomingDirective;
+      if (directiveConsumed) {
+        this.pendingDirectives.delete(heroId);
+      }
+    }
   }
 
   private buildFallbackAck(decision: HeroDecision): string {
     if (decision.groupOrders?.length) {
-      return 'Executing split squad orders.';
+      return decision.groupOrderMode === 'explicit_only'
+        ? 'Executing scoped group orders.'
+        : 'Executing split squad orders.';
     }
 
     switch (decision.intent) {
@@ -303,6 +309,7 @@ export class HeroScheduler {
     return {
       ...structuredDecision,
       groupOrders: mergedGroupOrders,
+      groupOrderMode: parsedDirective.groupOrderMode ?? structuredDecision.groupOrderMode,
       rationaleTag: this.appendDirectiveTag(structuredDecision.rationaleTag, 'directive_groups'),
     };
   }

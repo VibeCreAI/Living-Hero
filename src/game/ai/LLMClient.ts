@@ -47,7 +47,7 @@ const DECISION_SCHEMA = {
         properties: {
           group: {
             type: 'string',
-            enum: ['all', 'warriors', 'archers'],
+            enum: ['all', 'hero', 'warriors', 'archers'],
           },
           intent: {
             type: 'string',
@@ -85,7 +85,7 @@ const VALID_INTENTS: IntentType[] = [
   'use_skill',
 ];
 
-const VALID_GROUPS: UnitGroup[] = ['all', 'warriors', 'archers'];
+const VALID_GROUPS: UnitGroup[] = ['all', 'hero', 'warriors', 'archers'];
 
 export class LLMClient {
   private baseUrl: string;

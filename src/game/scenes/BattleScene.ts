@@ -2,7 +2,7 @@ import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { BattleLoop, BattleMapLayout, PlaygroundTargetConfig } from '../systems/BattleLoop';
 import { Obstacle } from '../systems/Obstacles';
-import { BattleResult, BattleMode, Position, UnitRole } from '../types';
+import { BattleResult, BattleMode, Position, UnitRole, PlayerChatMessageEvent } from '../types';
 import {
   createGroundTilemapLayer,
   getObjectLayerObjects,
@@ -22,7 +22,7 @@ export class BattleScene extends Scene {
   private returnTimer = 0;
   private sceneData: BattleSceneData = { nodeId: '', difficulty: 1, mode: 'battle' };
   private escapeKey!: Phaser.Input.Keyboard.Key;
-  private playerChatHandler?: (message: string) => void;
+  private playerChatHandler?: (message: PlayerChatMessageEvent) => void;
   private battleStartHandler?: () => void;
   private playgroundExitHandler?: () => void;
 
@@ -70,40 +70,6 @@ export class BattleScene extends Scene {
       textScale: 1.55,
     });
 
-    this.add
-      .text(
-        512,
-        750,
-        isPlayground
-          ? 'Directive: use chat to command the hero | ESC:Exit'
-          : 'Planning: chat strategy to the commander, then press Start Battle',
-        {
-          fontSize: '12px',
-          color: '#cccccc',
-          fontFamily: '"NeoDunggeunmoPro", monospace',
-          backgroundColor: '#000000aa',
-          padding: { x: 6, y: 3 },
-        }
-      )
-      .setOrigin(0.5);
-
-    if (isPlayground) {
-      this.add
-        .text(
-          512,
-          48,
-          'Try chat: "Hold behind the center wall" or "archers hold bottom rocks while warriors focus north target"',
-          {
-            fontSize: '11px',
-            color: '#cfefff',
-            fontFamily: '"NeoDunggeunmoPro", monospace',
-            backgroundColor: '#00000066',
-            padding: { x: 6, y: 3 },
-          }
-        )
-        .setOrigin(0.5);
-    }
-
     this.battleLoop = new BattleLoop();
     this.battleLoop.init(this, {
       difficulty: this.sceneData.difficulty,
@@ -113,7 +79,7 @@ export class BattleScene extends Scene {
 
     this.escapeKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
-    this.playerChatHandler = (message: string) => {
+    this.playerChatHandler = (message: PlayerChatMessageEvent) => {
       this.battleLoop.setPlayerDirective(message);
     };
     EventBus.on('player-chat-message', this.playerChatHandler);
