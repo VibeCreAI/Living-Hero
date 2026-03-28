@@ -1,4 +1,4 @@
-import { GroupOrder, HeroDecision, IntentType, UnitGroup } from '../types';
+import { IntentType, UnitGroup } from '../types';
 import { OLLAMA_CONFIG } from './config';
 
 export interface ChatMessage {
@@ -6,9 +6,27 @@ export interface ChatMessage {
   content: string;
 }
 
+/** Raw group order as the LLM produces it (nicknames + letters, not real IDs/coords) */
+export interface LLMGroupOrder {
+  group: UnitGroup;
+  intent: IntentType;
+  targetName?: string;
+  moveOption?: string;
+}
+
+/** Raw decision as the LLM produces it — needs resolution before becoming a HeroDecision */
+export interface LLMRawDecision {
+  chatResponse: string;
+  intent: IntentType;
+  targetName?: string;
+  moveOption?: string;
+  priority: 'low' | 'medium' | 'high';
+  groupOrders?: LLMGroupOrder[];
+}
+
 export interface LLMResponse {
   chatResponse: string;
-  decision: HeroDecision | null;
+  raw: LLMRawDecision;
 }
 
 /** JSON schema sent to Ollama structured outputs to guarantee valid response */
@@ -27,15 +45,8 @@ const DECISION_SCHEMA = {
         'use_skill',
       ],
     },
-    targetId: { type: 'string' },
-    moveTo: {
-      type: 'object',
-      properties: {
-        x: { type: 'number' },
-        y: { type: 'number' },
-      },
-    },
-    recheckInSec: { type: 'number' },
+    targetName: { type: 'string' },
+    moveOption: { type: 'string' },
     priority: {
       type: 'string',
       enum: ['low', 'medium', 'high'],
@@ -60,20 +71,14 @@ const DECISION_SCHEMA = {
               'use_skill',
             ],
           },
-          targetId: { type: 'string' },
-          moveTo: {
-            type: 'object',
-            properties: {
-              x: { type: 'number' },
-              y: { type: 'number' },
-            },
-          },
+          targetName: { type: 'string' },
+          moveOption: { type: 'string' },
         },
         required: ['group', 'intent'],
       },
     },
   },
-  required: ['chatResponse', 'intent', 'recheckInSec'],
+  required: ['chatResponse', 'intent'],
 };
 
 const VALID_INTENTS: IntentType[] = [
@@ -152,47 +157,38 @@ export class LLMClient {
   private parseResponse(content: string): LLMResponse {
     const raw = JSON.parse(content);
 
-    const intent = VALID_INTENTS.includes(raw.intent) ? raw.intent : 'hold_position';
-    const groupOrders: GroupOrder[] | undefined = Array.isArray(raw.groupOrders)
+    const intent: IntentType = VALID_INTENTS.includes(raw.intent)
+      ? raw.intent
+      : 'hold_position';
+
+    const groupOrders: LLMGroupOrder[] | undefined = Array.isArray(raw.groupOrders)
       ? raw.groupOrders
-          .map((groupOrder: any): GroupOrder | null => {
-            const group = VALID_GROUPS.includes(groupOrder?.group) ? groupOrder.group : null;
-            const groupIntent = VALID_INTENTS.includes(groupOrder?.intent)
-              ? groupOrder.intent
-              : null;
-
-            if (!group || !groupIntent) {
-              return null;
-            }
-
+          .map((go: any): LLMGroupOrder | null => {
+            const group = VALID_GROUPS.includes(go?.group) ? go.group : null;
+            const goIntent = VALID_INTENTS.includes(go?.intent) ? go.intent : null;
+            if (!group || !goIntent) return null;
             return {
               group,
-              intent: groupIntent,
-              targetId: typeof groupOrder.targetId === 'string' ? groupOrder.targetId : undefined,
-              moveTo:
-                typeof groupOrder.moveTo?.x === 'number' && typeof groupOrder.moveTo?.y === 'number'
-                  ? { x: groupOrder.moveTo.x, y: groupOrder.moveTo.y }
-                  : undefined,
+              intent: goIntent,
+              targetName: typeof go.targetName === 'string' ? go.targetName : undefined,
+              moveOption: typeof go.moveOption === 'string' ? go.moveOption : undefined,
             };
           })
-          .filter((groupOrder: GroupOrder | null): groupOrder is GroupOrder => groupOrder !== null)
+          .filter((go: LLMGroupOrder | null): go is LLMGroupOrder => go !== null)
       : undefined;
 
-    const decision: HeroDecision = {
+    const decision: LLMRawDecision = {
+      chatResponse: raw.chatResponse ?? '',
       intent,
-      targetId: raw.targetId,
-      moveTo: raw.moveTo,
-      skillId: undefined,
+      targetName: typeof raw.targetName === 'string' ? raw.targetName : undefined,
+      moveOption: typeof raw.moveOption === 'string' ? raw.moveOption : undefined,
+      priority: ['low', 'medium', 'high'].includes(raw.priority) ? raw.priority : 'medium',
       groupOrders: groupOrders && groupOrders.length > 0 ? groupOrders : undefined,
-      priority: raw.priority ?? 'medium',
-      rationaleTag:
-        groupOrders && groupOrders.length > 0 ? 'llm_group_orders' : `llm_${intent}`,
-      recheckInSec: typeof raw.recheckInSec === 'number' ? raw.recheckInSec : 2,
     };
 
     return {
-      chatResponse: raw.chatResponse ?? '',
-      decision,
+      chatResponse: decision.chatResponse,
+      raw: decision,
     };
   }
 }

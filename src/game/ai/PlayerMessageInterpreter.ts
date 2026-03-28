@@ -23,6 +23,7 @@ export function interpretPlayerMessage(
 ): HeroDecision | null {
   return (
     interpretGroupedMessage(summary, playerMessage, terrainDescription) ??
+    interpretAbstractSplitMessage(summary, playerMessage) ??
     interpretSingleMessage(summary, playerMessage, terrainDescription)
   );
 }
@@ -66,6 +67,213 @@ function interpretGroupedMessage(
     rationaleTag: 'parsed_group_orders',
     recheckInSec,
   };
+}
+
+/**
+ * Detect abstract split-intent commands like "each group target different enemy",
+ * "spread out and attack", "assign different targets", etc.
+ * Auto-generates smart group assignments based on unit roles and proximity.
+ */
+function interpretAbstractSplitMessage(
+  summary: HeroSummary,
+  playerMessage: string
+): HeroDecision | null {
+  const message = playerMessage.toLowerCase();
+
+  if (!isAbstractSplitIntent(message)) {
+    return null;
+  }
+
+  const aliveEnemies = summary.nearbyEnemies.filter((u) => u.state !== 'dead');
+  const aliveAllies = summary.nearbyAllies.filter((u) => u.state !== 'dead');
+  if (aliveEnemies.length === 0) {
+    return null;
+  }
+
+  // Determine the base intent from the message
+  const isFocusIntent = containsAny(message, ['target', 'attack', 'focus', 'kill', 'fight']);
+  const isDefensiveIntent = containsAny(message, ['defend', 'hold', 'guard', 'protect', 'cover']);
+
+  if (isFocusIntent) {
+    return buildSplitFocusOrders(summary, aliveEnemies, aliveAllies);
+  }
+
+  if (isDefensiveIntent) {
+    return buildSplitDefensiveOrders(summary, aliveEnemies, aliveAllies);
+  }
+
+  // Default: split focus
+  return buildSplitFocusOrders(summary, aliveEnemies, aliveAllies);
+}
+
+const ABSTRACT_SPLIT_PATTERNS = [
+  /\beach\s+(group|squad|unit)/,
+  /\bdifferent\s+(target|enem|direction|position|area)/,
+  /\bsplit\s+(up|them|attack|force|fire)/,
+  /\bspread\s+(out|fire|attack)/,
+  /\bassign\s+(different|separate|individual)/,
+  /\beveryone\s+(target|attack|focus)\s+(a\s+)?different/,
+  /\b(target|attack|focus)\s+different\s+(enem|target)/,
+  /\bdivide\s+(and|the|your)/,
+  /\bseparate\s+target/,
+  /\bone\s+each/,
+  /\bsurround\s+(them|the\s+enem)/,
+  /\bflank\s+(and|from|them)/,
+  /\bpincer/,
+  /\bmulti.?prong/,
+];
+
+function isAbstractSplitIntent(message: string): boolean {
+  return ABSTRACT_SPLIT_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Auto-assign each group to a different enemy based on smart matching:
+ * - Warriors → nearest enemy warrior (melee vs melee)
+ * - Archers → nearest enemy archer (ranged vs ranged) or weakest enemy
+ * - Hero → highest-value target (lowest HP or most dangerous)
+ */
+function buildSplitFocusOrders(
+  summary: HeroSummary,
+  enemies: UnitState[],
+  _allies: UnitState[]
+): HeroDecision {
+  const heroPos = summary.heroState.position;
+  const assigned = new Set<string>();
+  const groupOrders: GroupOrder[] = [];
+
+  // Sort enemies by distance from hero for assignment
+  const sortedByDistance = [...enemies].sort(
+    (a, b) => dist(a.position, heroPos) - dist(b.position, heroPos)
+  );
+
+  // Warriors → prefer enemy warriors (melee matchup), or nearest unassigned
+  const warriorTarget = pickTarget(enemies, assigned, 'warrior', heroPos);
+  if (warriorTarget) {
+    assigned.add(warriorTarget.id);
+    groupOrders.push({
+      group: 'warriors',
+      intent: 'focus_enemy',
+      targetId: warriorTarget.id,
+      moveTo: { ...warriorTarget.position },
+    });
+  }
+
+  // Archers → prefer enemy archers (counter-ranged), or weakest unassigned
+  const archerTarget = pickTarget(enemies, assigned, 'archer', heroPos);
+  if (archerTarget) {
+    assigned.add(archerTarget.id);
+    groupOrders.push({
+      group: 'archers',
+      intent: 'focus_enemy',
+      targetId: archerTarget.id,
+      moveTo: { ...archerTarget.position },
+    });
+  }
+
+  // Hero → weakest remaining enemy (highest value kill)
+  const heroTarget = pickWeakestUnassigned(enemies, assigned) ?? sortedByDistance[0];
+  if (heroTarget) {
+    assigned.add(heroTarget.id);
+    groupOrders.push({
+      group: 'hero',
+      intent: 'focus_enemy',
+      targetId: heroTarget.id,
+      moveTo: { ...heroTarget.position },
+    });
+  }
+
+  const primary = groupOrders[0];
+  return {
+    intent: 'focus_enemy',
+    targetId: primary?.targetId,
+    moveTo: primary?.moveTo ? { ...primary.moveTo } : undefined,
+    groupOrders,
+    groupOrderMode: 'explicit_only',
+    priority: 'high',
+    rationaleTag: 'parsed_abstract_split_focus',
+    recheckInSec: 30,
+  };
+}
+
+function buildSplitDefensiveOrders(
+  summary: HeroSummary,
+  enemies: UnitState[],
+  allies: UnitState[]
+): HeroDecision {
+  const heroPos = summary.heroState.position;
+  const groupOrders: GroupOrder[] = [];
+
+  // Warriors → advance to screen against nearest enemies
+  const enemyCenter = clusterCenter(enemies);
+  if (enemyCenter) {
+    const screenPoint = midpoint(heroPos, enemyCenter);
+    groupOrders.push({
+      group: 'warriors',
+      intent: 'advance_to_point',
+      moveTo: screenPoint,
+    });
+  }
+
+  // Archers → hold position (stay at range)
+  const archerAllies = allies.filter((u) => u.role === 'archer');
+  const archerCenter = clusterCenter(archerAllies) ?? heroPos;
+  groupOrders.push({
+    group: 'archers',
+    intent: 'hold_position',
+    moveTo: { ...archerCenter },
+  });
+
+  // Hero → protect (move between warriors and archers)
+  groupOrders.push({
+    group: 'hero',
+    intent: 'protect_target',
+    moveTo: { ...heroPos },
+  });
+
+  return {
+    intent: 'hold_position',
+    moveTo: { ...heroPos },
+    groupOrders,
+    groupOrderMode: 'explicit_only',
+    priority: 'medium',
+    rationaleTag: 'parsed_abstract_split_defensive',
+    recheckInSec: 30,
+  };
+}
+
+/** Pick the best target for a group, preferring same-role matchup */
+function pickTarget(
+  enemies: UnitState[],
+  assigned: Set<string>,
+  preferredRole: UnitState['role'],
+  referencePoint: Position
+): UnitState | undefined {
+  const available = enemies.filter((e) => !assigned.has(e.id));
+  if (available.length === 0) return undefined;
+
+  // Try role match first
+  const roleMatches = available.filter((e) => e.role === preferredRole);
+  if (roleMatches.length > 0) {
+    return roleMatches.sort((a, b) => dist(a.position, referencePoint) - dist(b.position, referencePoint))[0];
+  }
+
+  // Fall back to nearest
+  return available.sort((a, b) => dist(a.position, referencePoint) - dist(b.position, referencePoint))[0];
+}
+
+function pickWeakestUnassigned(enemies: UnitState[], assigned: Set<string>): UnitState | undefined {
+  const available = enemies.filter((e) => !assigned.has(e.id));
+  if (available.length === 0) return undefined;
+  return available.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+}
+
+function midpoint(a: Position, b: Position): Position {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function dist(a: Position, b: Position): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function interpretSingleMessage(

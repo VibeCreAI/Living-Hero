@@ -134,6 +134,12 @@ export class BattleLoop {
 
     this.heroScheduler.setTerrainDescription(this.buildTerrainDescription());
 
+    // Initialize vocabulary with nicknames for all units
+    this.heroScheduler.initVocabulary(
+      this.alliedUnits.map((unit) => unit.state),
+      this.enemyUnits.map((unit) => unit.state)
+    );
+
     this.stateManager.init(
       this.alliedUnits.map((unit) => unit.state),
       this.enemyUnits.map((unit) => unit.state),

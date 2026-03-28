@@ -41,14 +41,41 @@ export function BattleHUD() {
       setActiveHeroId(hero.id);
     };
 
+    const directiveParsedHandler = (event: {
+      heroId: string;
+      heroName: string;
+      directive: string;
+      parsedIntent: string;
+      parsedGroupOrders?: { group: string; intent: string }[];
+    }) => {
+      let text = `Parsed: ${event.parsedIntent.replace(/_/g, ' ')}`;
+      if (event.parsedGroupOrders?.length) {
+        const parts = event.parsedGroupOrders.map(
+          (go) => `${go.group}: ${go.intent.replace(/_/g, ' ')}`
+        );
+        text = `Parsed: ${parts.join(' | ')}`;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${messageIdRef.current++}`,
+          sender: 'system' as const,
+          speakerName: 'System',
+          text,
+        },
+      ]);
+    };
+
     EventBus.on('battle-state-update', stateHandler);
     EventBus.on('hero-chat-response', heroResponseHandler);
     EventBus.on('hero-selected', heroSelectionHandler);
+    EventBus.on('directive-parsed', directiveParsedHandler);
 
     return () => {
       EventBus.removeListener('battle-state-update', stateHandler);
       EventBus.removeListener('hero-chat-response', heroResponseHandler);
       EventBus.removeListener('hero-selected', heroSelectionHandler);
+      EventBus.removeListener('directive-parsed', directiveParsedHandler);
     };
   }, []);
 

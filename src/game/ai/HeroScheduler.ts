@@ -1,4 +1,4 @@
-import { BattleState, GroupOrder, HeroDecision, HeroSummary } from '../types';
+import { BattleState, GroupOrder, HeroDecision, HeroSummary, UnitState } from '../types';
 import { Hero } from '../entities/Hero';
 import { Unit } from '../entities/Unit';
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
@@ -8,6 +8,7 @@ import { buildHeroSummary } from './HeroSummaryBuilder';
 import { EventBus } from '../EventBus';
 import { interpretPlayerMessage } from './PlayerMessageInterpreter';
 import { adaptReactiveDecision } from './DirectiveTactics';
+import { BattleVocabulary } from './BattleVocabulary';
 
 export class HeroScheduler {
   private decisionProvider: IHeroDecisionProvider;
@@ -21,6 +22,11 @@ export class HeroScheduler {
   private reactiveLocks: Map<string, ReactiveDecisionLock> = new Map();
   private pendingDirectives: Map<string, string> = new Map();
   private terrainDescription: string | undefined;
+  /** Shared vocabulary — set once at battle start via initVocabulary() */
+  private vocabulary: BattleVocabulary = new BattleVocabulary();
+  /** Track last known state for event-driven recheck triggers */
+  private lastEnemyCount: Map<string, number> = new Map();
+  private lastAllyMinHpPct: Map<string, number> = new Map();
 
   constructor(
     decisionProvider: IHeroDecisionProvider,
@@ -29,6 +35,14 @@ export class HeroScheduler {
     this.decisionProvider = decisionProvider;
     this.ollamaBrain = ollamaBrain ?? null;
     this.intentExecutor = new IntentExecutor();
+  }
+
+  /** Initialize vocabulary with unit nicknames at battle start */
+  initVocabulary(alliedUnits: UnitState[], enemyUnits: UnitState[]): void {
+    this.vocabulary.assignNicknames(alliedUnits, enemyUnits);
+    if (this.ollamaBrain) {
+      this.ollamaBrain.vocabulary = this.vocabulary;
+    }
   }
 
   setPlayerDirective(directive: string, targetHeroIds: string[]): void {
@@ -61,8 +75,31 @@ export class HeroScheduler {
       }
 
       const summary = buildHeroSummary(hero.state, battleState);
+
+      // ── Interim decision: apply parsed directive immediately while LLM processes ──
+      if (incomingDirective && this.ollamaBrain) {
+        const parsed = interpretPlayerMessage(summary, incomingDirective, this.terrainDescription);
+        if (parsed) {
+          // Emit parsed event for UI feedback
+          EventBus.emit('directive-parsed', {
+            heroId,
+            heroName: hero.state.name,
+            directive: incomingDirective,
+            parsedIntent: parsed.intent,
+            parsedGroupOrders: parsed.groupOrders,
+          });
+
+          // Apply interim decision so units move immediately
+          const interimDecision = this.applyDirectiveStructure(summary, parsed);
+          this.baseDecisions.set(heroId, interimDecision);
+          hero.setDecision(interimDecision);
+          this.intentExecutor.execute(hero, interimDecision, alliedUnits, enemyUnits);
+        }
+      }
+
       let queuedChatResponse: string | undefined;
 
+      // ── Process queued LLM result ──
       const queuedResult = this.queuedResults.get(heroId);
       if (queuedResult) {
         this.queuedResults.delete(heroId);
@@ -72,6 +109,7 @@ export class HeroScheduler {
         this.timers.set(heroId, 0);
       }
 
+      // ── Execute current decision ──
       const baseDecision = this.baseDecisions.get(heroId);
       if (baseDecision) {
         const activeDecision = this.stabilizeDecision(
@@ -95,14 +133,17 @@ export class HeroScheduler {
         continue;
       }
 
+      // ── Check if recheck is needed ──
       const elapsed = (this.timers.get(heroId) ?? 0) + dt;
       const recheckInterval = hero.state.currentDecision?.recheckInSec ?? 0;
+      const eventTriggered = this.checkEventTriggers(heroId, summary);
 
-      if (!incomingDirective && elapsed < recheckInterval) {
+      if (!incomingDirective && !eventTriggered && elapsed < recheckInterval) {
         this.timers.set(heroId, elapsed);
         continue;
       }
 
+      // ── Request new decision ──
       if (this.ollamaBrain) {
         this.pendingHeroes.add(heroId);
         const directive = incomingDirective;
@@ -140,6 +181,7 @@ export class HeroScheduler {
             this.timers.set(heroId, 0);
           });
       } else {
+        // No LLM — synchronous path
         const directive = incomingDirective;
         directiveConsumed = !directive ? directiveConsumed : true;
         const decision = directive
@@ -156,6 +198,14 @@ export class HeroScheduler {
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
         if (directive) {
+          // Emit parsed event for UI
+          EventBus.emit('directive-parsed', {
+            heroId,
+            heroName: hero.state.name,
+            directive,
+            parsedIntent: decision.intent,
+            parsedGroupOrders: decision.groupOrders,
+          });
           const response = this.buildFallbackAck(activeDecision);
           hero.setSpeech(response);
           EventBus.emit('hero-chat-response', {
@@ -173,11 +223,39 @@ export class HeroScheduler {
     }
   }
 
+  // ── Event-driven recheck triggers ──
+
+  private checkEventTriggers(heroId: string, summary: HeroSummary): boolean {
+    const aliveEnemies = summary.nearbyEnemies.filter((u) => u.state !== 'dead');
+    const aliveAllies = summary.nearbyAllies.filter((u) => u.state !== 'dead');
+
+    // Enemy count changed (unit died)
+    const prevEnemyCount = this.lastEnemyCount.get(heroId) ?? aliveEnemies.length;
+    this.lastEnemyCount.set(heroId, aliveEnemies.length);
+    if (aliveEnemies.length < prevEnemyCount) {
+      return true;
+    }
+
+    // Ally dropped below 30% HP
+    const minAllyHpPct = aliveAllies.length > 0
+      ? Math.min(...aliveAllies.map((u) => u.hp / u.maxHp))
+      : 1;
+    const prevMinHp = this.lastAllyMinHpPct.get(heroId) ?? 1;
+    this.lastAllyMinHpPct.set(heroId, minAllyHpPct);
+    if (minAllyHpPct < 0.3 && prevMinHp >= 0.3) {
+      return true;
+    }
+
+    return false;
+  }
+
   private buildFallbackAck(decision: HeroDecision): string {
     if (decision.groupOrders?.length) {
-      return decision.groupOrderMode === 'explicit_only'
-        ? 'Executing scoped group orders.'
-        : 'Executing split squad orders.';
+      const parts = decision.groupOrders.map((go) => {
+        const intentLabel = go.intent.replace(/_/g, ' ').replace(' to point', '').replace(' position', '');
+        return `${go.group}: ${intentLabel}`;
+      });
+      return `Split orders: ${parts.join(', ')}.`;
     }
 
     switch (decision.intent) {

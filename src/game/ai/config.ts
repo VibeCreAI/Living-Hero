@@ -2,7 +2,7 @@
 export const OLLAMA_CONFIG = {
   baseUrl: 'http://localhost:11434',
   model: 'alibayram/smollm3',
-  maxTokens: 100,
+  maxTokens: 150,
   temperature: 0.7,
   timeoutMs: 3000,
   healthCheckIntervalMs: 10000,

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 export interface CommunicationMessage {
   id: string;
-  sender: 'player' | 'hero';
+  sender: 'player' | 'hero' | 'system';
   speakerName: string;
   text: string;
   recipientNames?: string[];
@@ -57,12 +57,21 @@ export function CommunicationLog({ messages }: CommunicationLogProps) {
         {messages.length === 0 && (
           <div style={{ color: '#726a5c' }}>Send an order from the bottom comms bar to start the conversation.</div>
         )}
-        {messages.map((message) => (
+        {messages.filter((m) => m.sender !== 'system').map((message) => (
           <div key={message.id} style={{ marginBottom: '8px' }}>
-            <div style={{ color: message.sender === 'player' ? '#8fc7ff' : '#ffd700', marginBottom: '2px' }}>
+            <div style={{
+              color: message.sender === 'system' ? '#a89060' : message.sender === 'player' ? '#8fc7ff' : '#ffd700',
+              marginBottom: '2px',
+              fontStyle: message.sender === 'system' ? 'italic' : 'normal',
+            }}>
               [{formatSpeaker(message)}]
             </div>
-            <div style={{ color: message.sender === 'player' ? '#d7e7ff' : '#f2efe5' }}>{message.text}</div>
+            <div style={{
+              color: message.sender === 'system' ? '#a89060' : message.sender === 'player' ? '#d7e7ff' : '#f2efe5',
+              fontStyle: message.sender === 'system' ? 'italic' : 'normal',
+            }}>
+              {message.text}
+            </div>
           </div>
         ))}
       </div>

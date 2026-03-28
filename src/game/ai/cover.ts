@@ -250,7 +250,7 @@ function refineGroupOrderPositionForCover(
   };
 }
 
-function findBestPointAroundObstacle(
+export function findBestPointAroundObstacle(
   summary: HeroSummary,
   obstacle: BattleObstacle,
   intent: TacticalIntent,

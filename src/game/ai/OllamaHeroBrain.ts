@@ -1,15 +1,22 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
-import { HeroSummary, HeroDecision, UnitState, GroupOrder } from '../types';
-import { LLMClient, ChatMessage } from './LLMClient';
+import { HeroSummary, HeroDecision, GroupOrder } from '../types';
+import { LLMClient, ChatMessage, LLMRawDecision, LLMGroupOrder } from './LLMClient';
 import { buildHeroSystemPrompt } from './heroPrompts';
 import { buildContextPrompt } from './contextBuilder';
 import { LocalRuleBasedHeroBrain } from './LocalRuleBasedHeroBrain';
-import { OLLAMA_CONFIG } from './config';
-import { interpretPlayerMessage } from './PlayerMessageInterpreter';
+import { OLLAMA_CONFIG, AI_CONFIG } from './config';
+import { BattleVocabulary } from './BattleVocabulary';
+import {
+  TacticalPositionMenuResult,
+  buildTacticalPositionMenu,
+  resolveMoveOption,
+} from './TacticalPositionMenu';
 
 export interface OllamaDecisionResult {
   decision: HeroDecision;
   chatResponse: string;
+  positionMenu: TacticalPositionMenuResult;
+  vocabulary: BattleVocabulary;
 }
 
 const FALLBACK_DECISION: HeroDecision = {
@@ -21,15 +28,16 @@ const FALLBACK_DECISION: HeroDecision = {
 
 /**
  * LLM-powered hero brain using Ollama with structured outputs.
- * Implements IHeroDecisionProvider for sync compatibility.
- * Use decideAsync() for the full LLM experience with chat responses.
+ * Now stateless per call (no conversation history).
+ * Returns raw LLM decisions resolved to real IDs + coordinates.
  */
 export class OllamaHeroBrain implements IHeroDecisionProvider {
   private client: LLMClient;
   private fallback: LocalRuleBasedHeroBrain;
-  private conversationHistory: ChatMessage[] = [];
-  private lastDecision: HeroDecision = FALLBACK_DECISION;
   private pending = false;
+
+  /** Shared vocabulary — set by the scheduler at battle start */
+  vocabulary: BattleVocabulary = new BattleVocabulary();
 
   /** Debug info from the last LLM call */
   lastLatencyMs = 0;
@@ -45,14 +53,14 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     this.fallback = new LocalRuleBasedHeroBrain();
   }
 
-  /** Sync decide — returns cached decision or fallback. Used by IHeroDecisionProvider. */
+  /** Sync decide — returns fallback decision. Used by IHeroDecisionProvider. */
   decide(summary: HeroSummary): HeroDecision {
     return this.fallback.decide(summary);
   }
 
   /**
-   * Async decide — sends to Ollama, returns decision + chat response.
-   * Called by the scheduler; non-blocking to the game loop.
+   * Async decide — sends to Ollama, returns resolved decision + chat response.
+   * Each call is stateless (no conversation history).
    */
   async decideAsync(
     summary: HeroSummary,
@@ -60,7 +68,12 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     terrainDescription?: string
   ): Promise<OllamaDecisionResult> {
     if (this.pending) {
-      return { decision: this.lastDecision, chatResponse: '' };
+      return {
+        decision: FALLBACK_DECISION,
+        chatResponse: '',
+        positionMenu: buildTacticalPositionMenu(summary),
+        vocabulary: this.vocabulary,
+      };
     }
 
     this.pending = true;
@@ -71,13 +84,22 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         throw new Error('Ollama unavailable');
       }
 
-      const systemPrompt = buildHeroSystemPrompt(summary.heroState);
-      const contextPrompt = buildContextPrompt(summary, playerMessage, terrainDescription);
+      // Build position menu for this decision cycle
+      const positionMenu = buildTacticalPositionMenu(summary);
 
-      // Build message list: system + recent conversation + new context
+      // Build prompts
+      const systemPrompt = buildHeroSystemPrompt(summary.heroState);
+      const contextPrompt = buildContextPrompt(
+        summary,
+        positionMenu,
+        this.vocabulary,
+        playerMessage,
+        terrainDescription
+      );
+
+      // Stateless: system + single user message (no history)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
-        ...this.conversationHistory.slice(-4), // keep last 2 exchanges
         { role: 'user', content: contextPrompt },
       ];
 
@@ -86,36 +108,28 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
       this.lastLatencyMs = performance.now() - start;
       this.llmCallCount++;
 
-      if (response.decision) {
-        const normalizedDecision = this.normalizeDecision(
-          response.decision,
-          summary,
-          playerMessage,
-          terrainDescription,
-          response.chatResponse
-        );
-        this.lastDecision = normalizedDecision;
+      // Resolve the raw LLM output to a real HeroDecision
+      const decision = this.resolveRawDecision(
+        response.raw,
+        summary,
+        positionMenu
+      );
 
-        // Store in conversation history
-        this.conversationHistory.push(
-          { role: 'user', content: contextPrompt },
-          { role: 'assistant', content: response.chatResponse }
-        );
-
-        // Cap history length
-        if (this.conversationHistory.length > 10) {
-          this.conversationHistory = this.conversationHistory.slice(-6);
-        }
-
-        return { decision: normalizedDecision, chatResponse: response.chatResponse };
-      }
-
-      throw new Error('No valid decision from LLM');
+      return {
+        decision,
+        chatResponse: response.chatResponse,
+        positionMenu,
+        vocabulary: this.vocabulary,
+      };
     } catch {
       this.fallbackCount++;
       const fallbackDecision = this.fallback.decide(summary);
-      this.lastDecision = fallbackDecision;
-      return { decision: fallbackDecision, chatResponse: '' };
+      return {
+        decision: fallbackDecision,
+        chatResponse: '',
+        positionMenu: buildTacticalPositionMenu(summary),
+        vocabulary: this.vocabulary,
+      };
     } finally {
       this.pending = false;
     }
@@ -126,190 +140,107 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     const interval = setInterval(() => {
       this.client.healthCheck();
     }, OLLAMA_CONFIG.healthCheckIntervalMs);
-
     return () => clearInterval(interval);
   }
 
-  /** Reset conversation history (e.g., between battles) */
+  /** Reset stats between battles */
   resetConversation(): void {
-    this.conversationHistory = [];
-    this.lastDecision = FALLBACK_DECISION;
     this.lastLatencyMs = 0;
     this.fallbackCount = 0;
     this.llmCallCount = 0;
   }
 
-  private normalizeDecision(
-    decision: HeroDecision,
+  /**
+   * Resolve raw LLM output (nicknames + letters) into a real HeroDecision (IDs + coordinates).
+   */
+  private resolveRawDecision(
+    raw: LLMRawDecision,
     summary: HeroSummary,
-    playerMessage?: string,
-    terrainDescription?: string,
-    chatResponse?: string
+    positionMenu: TacticalPositionMenuResult
   ): HeroDecision {
-    const parsedDirective = playerMessage
-      ? interpretPlayerMessage(summary, playerMessage, terrainDescription)
-      : null;
-    const parsedChatPlan = chatResponse
-      ? interpretPlayerMessage(summary, chatResponse, terrainDescription)
-      : null;
+    const heroPos = summary.heroState.position;
 
-    const normalized: HeroDecision = {
-      ...decision,
-      moveTo: decision.moveTo ? { ...decision.moveTo } : undefined,
-      groupOrders: decision.groupOrders?.map((groupOrder) => ({
-        ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
-      })),
-    };
-
-    const allUnits = [...summary.nearbyAllies, ...summary.nearbyEnemies];
-    const validTarget = normalized.targetId
-      ? allUnits.find((unit) => unit.id === normalized.targetId)
-      : undefined;
-    const namedEnemy = playerMessage
-      ? this.resolveNamedEnemy(summary.nearbyEnemies, playerMessage)
+    // Resolve targetName → targetId
+    const targetId = raw.targetName
+      ? this.vocabulary.resolveNickname(raw.targetName)
       : undefined;
 
-    if (!validTarget && namedEnemy) {
-      normalized.targetId = namedEnemy.id;
-    } else if (!validTarget && normalized.targetId) {
-      normalized.targetId = undefined;
-    }
-
-    if (!normalized.moveTo && namedEnemy && normalized.intent === 'focus_enemy') {
-      normalized.moveTo = { ...namedEnemy.position };
-    }
-
-    if (parsedDirective && normalized.intent === parsedDirective.intent) {
-      normalized.targetId ??= parsedDirective.targetId;
-      normalized.moveTo ??= parsedDirective.moveTo ? { ...parsedDirective.moveTo } : undefined;
-    }
-
-    normalized.groupOrders = this.mergeDirectiveGroupOrders(
-      normalized.groupOrders,
-      parsedChatPlan?.groupOrders
-    );
-    normalized.groupOrders = this.mergeDirectiveGroupOrders(
-      normalized.groupOrders,
-      parsedDirective?.groupOrders
-    );
-
-    if (normalized.groupOrders?.length) {
-      normalized.groupOrders = normalized.groupOrders
-        .map((groupOrder) => this.normalizeGroupOrder(groupOrder, allUnits, namedEnemy))
-        .filter((groupOrder): groupOrder is GroupOrder => groupOrder !== null);
-
-      if (normalized.groupOrders.length === 0) {
-        normalized.groupOrders = undefined;
-      } else if (!normalized.rationaleTag.includes('group_orders')) {
-        normalized.rationaleTag = parsedChatPlan?.groupOrders?.length
-          ? 'llm_chat_group_orders'
-          : 'llm_group_orders_scaffolded';
-      } else if (
-        parsedChatPlan?.groupOrders?.length &&
-        normalized.rationaleTag === 'llm_group_orders'
-      ) {
-        normalized.rationaleTag = 'llm_group_orders_scaffolded';
-      }
-    }
-
-    return normalized;
-  }
-
-  private normalizeGroupOrder(
-    groupOrder: GroupOrder,
-    allUnits: UnitState[],
-    namedEnemy?: UnitState
-  ): GroupOrder | null {
-    const validTarget = groupOrder.targetId
-      ? allUnits.find((unit) => unit.id === groupOrder.targetId)
+    // Resolve moveOption → moveTo coordinates
+    const moveTo = raw.moveOption
+      ? resolveMoveOption(positionMenu, raw.moveOption, heroPos)
       : undefined;
-    const targetId = validTarget
-      ? validTarget.id
-      : groupOrder.intent === 'focus_enemy' && namedEnemy
-        ? namedEnemy.id
-        : undefined;
-    const fallbackMoveTo =
-      groupOrder.intent === 'focus_enemy' && targetId === namedEnemy?.id && namedEnemy
-        ? { ...namedEnemy.position }
-        : undefined;
+
+    // If focus_enemy with a target but no moveTo, point at the target's position
+    const resolvedMoveTo =
+      !moveTo && targetId && raw.intent === 'focus_enemy'
+        ? this.findUnitPosition(targetId, summary)
+        : moveTo;
+
+    // Resolve group orders
+    const groupOrders = raw.groupOrders
+      ? this.resolveGroupOrders(raw.groupOrders, summary, positionMenu)
+      : undefined;
+
+    // Compute recheckInSec deterministically from traits
+    const traits = summary.heroState.traits;
+    const recheckInSec =
+      AI_CONFIG.recheckInterval.base + (1 - traits.decisiveness) * AI_CONFIG.recheckInterval.scale;
+
+    const rationaleTag = groupOrders?.length
+      ? 'llm_group_orders'
+      : `llm_${raw.intent}`;
 
     return {
-      ...groupOrder,
+      intent: raw.intent,
       targetId,
-      moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : fallbackMoveTo,
+      moveTo: resolvedMoveTo,
+      skillId: undefined,
+      groupOrders,
+      priority: raw.priority,
+      rationaleTag,
+      recheckInSec,
     };
   }
 
-  private mergeDirectiveGroupOrders(
-    llmOrders: GroupOrder[] | undefined,
-    parsedOrders: GroupOrder[] | undefined
+  private resolveGroupOrders(
+    rawOrders: LLMGroupOrder[],
+    summary: HeroSummary,
+    positionMenu: TacticalPositionMenuResult
   ): GroupOrder[] | undefined {
-    if (!parsedOrders?.length) {
-      return llmOrders;
-    }
+    const heroPos = summary.heroState.position;
+    const resolved: GroupOrder[] = [];
 
-    if (!llmOrders?.length) {
-      return parsedOrders.map((groupOrder) => ({
-        ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
-      }));
-    }
+    for (const go of rawOrders) {
+      const targetId = go.targetName
+        ? this.vocabulary.resolveNickname(go.targetName)
+        : undefined;
+      const moveTo = go.moveOption
+        ? resolveMoveOption(positionMenu, go.moveOption, heroPos)
+        : undefined;
 
-    const merged = new Map<GroupOrder['group'], GroupOrder>();
-    for (const groupOrder of llmOrders) {
-      merged.set(groupOrder.group, {
-        ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
+      // If focus with target but no position, use target's location
+      const resolvedMoveTo =
+        !moveTo && targetId && go.intent === 'focus_enemy'
+          ? this.findUnitPosition(targetId, summary)
+          : moveTo;
+
+      resolved.push({
+        group: go.group,
+        intent: go.intent,
+        targetId,
+        moveTo: resolvedMoveTo,
       });
     }
 
-    for (const parsedOrder of parsedOrders) {
-      const existing = merged.get(parsedOrder.group);
-      if (!existing) {
-        merged.set(parsedOrder.group, {
-          ...parsedOrder,
-          moveTo: parsedOrder.moveTo ? { ...parsedOrder.moveTo } : undefined,
-        });
-        continue;
-      }
-
-      if (existing.intent !== parsedOrder.intent) {
-        continue;
-      }
-
-      merged.set(parsedOrder.group, {
-        ...existing,
-        targetId: existing.targetId ?? parsedOrder.targetId,
-        moveTo: existing.moveTo
-          ? { ...existing.moveTo }
-          : parsedOrder.moveTo
-            ? { ...parsedOrder.moveTo }
-            : undefined,
-      });
-    }
-
-    return [...merged.values()];
+    return resolved.length > 0 ? resolved : undefined;
   }
 
-  private resolveNamedEnemy(enemies: UnitState[], playerMessage: string): UnitState | undefined {
-    const message = playerMessage.toLowerCase();
-    let bestMatch: UnitState | undefined;
-    let bestLength = -1;
-
-    for (const enemy of enemies) {
-      const names = [enemy.displayName, enemy.id]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => value.toLowerCase());
-
-      for (const name of names) {
-        if (message.includes(name) && name.length > bestLength) {
-          bestLength = name.length;
-          bestMatch = enemy;
-        }
-      }
-    }
-
-    return bestMatch;
+  private findUnitPosition(
+    unitId: string,
+    summary: HeroSummary
+  ): { x: number; y: number } | undefined {
+    const allUnits = [...summary.nearbyAllies, ...summary.nearbyEnemies];
+    const unit = allUnits.find((u) => u.id === unitId);
+    return unit ? { ...unit.position } : undefined;
   }
 }

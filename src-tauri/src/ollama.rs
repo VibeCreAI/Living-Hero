@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
 
 const OLLAMA_PORT: u16 = 11434;
-const DEFAULT_MODEL: &str = "phi3.5";
+const DEFAULT_MODEL: &str = "alibayram/smollm3";
 const STARTUP_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Default)]
