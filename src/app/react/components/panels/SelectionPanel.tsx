@@ -38,7 +38,7 @@ export function SelectionPanel() {
         borderRadius: '3px',
         backgroundColor: '#1a1a2e',
         fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontSize: '11px',
+        fontSize: '13px',
         color: '#ccc',
       }}
     >
@@ -55,7 +55,7 @@ export function SelectionPanel() {
           borderRadius: '2px',
           cursor: 'pointer',
           fontFamily: '"NeoDunggeunmoPro", monospace',
-          fontSize: '10px',
+          fontSize: '14px',
         }}
       >
         Deselect
@@ -70,7 +70,7 @@ function UnitInfo({ unit }: { unit: UnitState }) {
 
   return (
     <>
-      <div style={{ color: factionColor, fontSize: '12px', marginBottom: '3px' }}>
+      <div style={{ color: factionColor, fontSize: '14px', marginBottom: '3px' }}>
         {unit.displayName ?? `${unit.faction.toUpperCase()} ${unit.role.toUpperCase()}`}
       </div>
       <div>
@@ -92,7 +92,7 @@ function HeroInfo({ hero }: { hero: HeroState }) {
 
   return (
     <>
-      <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '3px' }}>
+      <div style={{ color: '#ffd700', fontSize: '14px', marginBottom: '3px' }}>
         {hero.name}
       </div>
       <div>
@@ -121,7 +121,7 @@ function HeroInfo({ hero }: { hero: HeroState }) {
           ))}
         </>
       )}
-      <div style={{ marginTop: '3px', color: '#888', fontSize: '10px' }}>
+      <div style={{ marginTop: '3px', color: '#888', fontSize: '12px' }}>
         Bold:{hero.traits.boldness.toFixed(1)} Caut:{hero.traits.caution.toFixed(1)}{' '}
         Disc:{hero.traits.discipline.toFixed(1)} Emp:{hero.traits.empathy.toFixed(1)}
       </div>

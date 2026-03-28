@@ -1,11 +1,49 @@
 import { Scene } from 'phaser';
 
+/**
+ * PreBootScene loads only the logo, then hands off to BootScene
+ * which displays the logo + progress bar while loading all game assets.
+ */
+export class PreBootScene extends Scene {
+  constructor() {
+    super('PreBootScene');
+  }
+
+  preload(): void {
+    this.load.image('logo', 'assets/logo.png');
+  }
+
+  create(): void {
+    this.scene.start('BootScene');
+  }
+}
+
 export class BootScene extends Scene {
   constructor() {
     super('BootScene');
   }
 
   preload(): void {
+    // Show the logo (already loaded by PreBootScene)
+    const logo = this.add.image(512, 320, 'logo').setOrigin(0.5).setDepth(10);
+    logo.setScale(2);
+
+    const loadingText = this.add.text(512, 430, 'Loading...', {
+      fontSize: '16px',
+      color: '#eadfc7',
+      fontFamily: '"NeoDunggeunmoPro", monospace',
+    }).setOrigin(0.5).setDepth(10);
+
+    // Progress bar
+    this.add.rectangle(512, 460, 300, 12, 0x3b2c18).setDepth(10);
+    const barFill = this.add.rectangle(512 - 148, 460, 0, 8, 0xffd700).setOrigin(0, 0.5).setDepth(10);
+
+    this.load.on('progress', (value: number) => {
+      barFill.width = 296 * value;
+      loadingText.setText(`Loading... ${Math.round(value * 100)}%`);
+    });
+
+    // Load all game assets
     this.load.spritesheet('blue-warrior-idle', 'assets/Units/Blue Units/Warrior/Warrior_Idle.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('blue-warrior-run', 'assets/Units/Blue Units/Warrior/Warrior_Run.png', { frameWidth: 192, frameHeight: 192 });
     this.load.spritesheet('blue-warrior-attack', 'assets/Units/Blue Units/Warrior/Warrior_Attack1.png', { frameWidth: 192, frameHeight: 192 });

@@ -27,14 +27,14 @@ export function OverworldHUD() {
         padding: '8px 10px',
         color: '#ccc',
         fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontSize: '12px',
+        fontSize: '14px',
         border: '1px solid #3b2c18',
         borderRadius: '8px',
         backgroundColor: '#120d09d9',
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ marginBottom: '4px', color: '#ffd700', fontSize: '14px' }}>OVERWORLD</div>
+      <div style={{ marginBottom: '4px', color: '#ffd700', fontSize: '16px' }}>OVERWORLD</div>
       <div>Hero: Commander</div>
       <div>Position: ({Math.round(data.heroPosition.x)}, {Math.round(data.heroPosition.y)})</div>
       {data.nearNode && (

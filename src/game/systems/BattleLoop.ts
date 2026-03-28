@@ -5,6 +5,7 @@ import {
   BattleResult,
   BattleState,
   BattleMode,
+  DamageEvent,
   PlayerChatMessageEvent,
 } from '../types';
 import { Unit, createUnitState } from '../entities/Unit';
@@ -73,6 +74,8 @@ export class BattleLoop {
   private mode: BattleMode = 'battle';
   private planningRequested = false;
   private layout: BattleMapLayout = {};
+
+  private allDamageEvents: DamageEvent[] = [];
 
   alliedUnits: Unit[] = [];
   enemyUnits: Unit[] = [];
@@ -179,6 +182,9 @@ export class BattleLoop {
       this.stateManager.getState().timeSec
     );
     this.stateManager.recordDamage(damageEvents);
+    if (damageEvents.length > 0) {
+      this.allDamageEvents.push(...damageEvents);
+    }
 
     this.syncVisuals();
 
@@ -190,6 +196,18 @@ export class BattleLoop {
 
   getState(): BattleState {
     return this.stateManager.getState();
+  }
+
+  getAllDamageEvents(): DamageEvent[] {
+    return this.allDamageEvents;
+  }
+
+  getAIStats(): { llmCallCount: number; fallbackCount: number; lastLatencyMs: number } {
+    return {
+      llmCallCount: this.ollamaBrain.llmCallCount,
+      fallbackCount: this.ollamaBrain.fallbackCount,
+      lastLatencyMs: this.ollamaBrain.lastLatencyMs,
+    };
   }
 
   private shouldProcessPlanning(): boolean {
@@ -364,6 +382,7 @@ ${targets}`;
     this.alliedUnits = [];
     this.enemyUnits = [];
     this.heroes = [];
+    this.allDamageEvents = [];
     this.mode = 'battle';
     this.planningRequested = false;
     this.layout = {};

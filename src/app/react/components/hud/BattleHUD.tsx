@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EventBus } from '../../../../game/EventBus';
-import { BattleState, HeroDecision, HeroState, HeroChatEvent, UnitGroup } from '../../../../game/types';
+import { BattleState, BattleSummaryData, HeroDecision, HeroState, HeroChatEvent, UnitGroup } from '../../../../game/types';
 import { CommunicationLog, CommunicationMessage } from './ChatPanel';
+import { BattleSummary } from './BattleSummary';
 import { LLMStatus } from './LLMStatus';
 import { DecisionTimeline } from './DecisionTimeline';
 import { SelectionPanel } from '../panels/SelectionPanel';
@@ -12,6 +13,7 @@ export function BattleHUD() {
   const [battleState, setBattleState] = useState<BattleState | null>(null);
   const [activeHeroId, setActiveHeroId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CommunicationMessage[]>([]);
+  const [summaryData, setSummaryData] = useState<BattleSummaryData | null>(null);
   const [planningOverlayVisible, setPlanningOverlayVisible] = useState(false);
   const [battleStartPending, setBattleStartPending] = useState(false);
   const messageIdRef = useRef(0);
@@ -19,12 +21,19 @@ export function BattleHUD() {
   useEffect(() => {
     const stateHandler = (state: BattleState) => {
       setBattleState(state);
+      if (state.phase === 'init') {
+        setSummaryData(null);
+      }
       setActiveHeroId((current) => {
         if (current && state.heroes.some((hero) => hero.id === current)) {
           return current;
         }
         return state.heroes[0]?.id ?? null;
       });
+    };
+
+    const summaryHandler = (data: BattleSummaryData) => {
+      setSummaryData(data);
     };
 
     const heroResponseHandler = (event: HeroChatEvent) => {
@@ -72,12 +81,14 @@ export function BattleHUD() {
     EventBus.on('hero-chat-response', heroResponseHandler);
     EventBus.on('hero-selected', heroSelectionHandler);
     EventBus.on('directive-parsed', directiveParsedHandler);
+    EventBus.on('battle-summary', summaryHandler);
 
     return () => {
       EventBus.removeListener('battle-state-update', stateHandler);
       EventBus.removeListener('hero-chat-response', heroResponseHandler);
       EventBus.removeListener('hero-selected', heroSelectionHandler);
       EventBus.removeListener('directive-parsed', directiveParsedHandler);
+      EventBus.removeListener('battle-summary', summaryHandler);
     };
   }, []);
 
@@ -168,7 +179,7 @@ export function BattleHUD() {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '15px' }}>
+          <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '17px' }}>
             {isPlayground ? 'PLAYGROUND' : 'BATTLE'}
           </span>
           <LLMStatus />
@@ -187,7 +198,7 @@ export function BattleHUD() {
                 color: hero.id === activeHero?.id ? '#ffd700' : '#d4c4a1',
                 cursor: 'pointer',
                 fontFamily: '"NeoDunggeunmoPro", monospace',
-                fontSize: '10px',
+                fontSize: '12px',
               }}
             >
               @{hero.name}
@@ -221,7 +232,7 @@ export function BattleHUD() {
               style={{
                 padding: '5px 8px',
                 fontFamily: '"NeoDunggeunmoPro", monospace',
-                fontSize: '12px',
+                fontSize: '14px',
                 cursor: 'pointer',
                 backgroundColor: '#2b1b12',
                 color: '#ffcc66',
@@ -260,7 +271,7 @@ export function BattleHUD() {
             backgroundColor: hasSplitPlan ? '#171b12' : '#141414',
           }}
         >
-          <div style={{ color: '#9a9a9a', marginBottom: '4px', fontSize: '11px' }}>
+          <div style={{ color: '#9a9a9a', marginBottom: '4px', fontSize: '13px' }}>
             {hasSplitPlan ? 'Hero Plan' : 'Army Plan'}
           </div>
           <PlanRow label="Army" value={armyPlan} color="#ffd700" />
@@ -307,6 +318,8 @@ export function BattleHUD() {
         />
       </div>
 
+      {summaryData && <BattleSummary data={summaryData} messages={messages} />}
+
       {isPlanning && !battleStartPending && (
         <>
           {!planningOverlayVisible && (
@@ -328,7 +341,7 @@ export function BattleHUD() {
                   color: '#ffd889',
                   cursor: 'pointer',
                   fontFamily: '"NeoDunggeunmoPro", monospace',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   boxShadow: '0 8px 20px rgba(0,0,0,0.28)',
                 }}
               >
@@ -368,8 +381,8 @@ export function BattleHUD() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <div>
-                    <div style={{ color: '#ffd700', fontSize: '15px', marginBottom: '4px' }}>Battle Start</div>
-                    <div style={{ color: '#cdbd97', fontSize: '11px' }}>
+                    <div style={{ color: '#ffd700', fontSize: '17px', marginBottom: '4px' }}>Battle Start</div>
+                    <div style={{ color: '#cdbd97', fontSize: '13px' }}>
                       Optional: send an opening order, review the plan on the right, then start combat.
                     </div>
                   </div>
@@ -383,7 +396,7 @@ export function BattleHUD() {
                       color: '#d7c08e',
                       cursor: 'pointer',
                       fontFamily: '"NeoDunggeunmoPro", monospace',
-                      fontSize: '11px',
+                      fontSize: '13px',
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -406,7 +419,7 @@ export function BattleHUD() {
                 />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ color: '#9f957e', fontSize: '10px' }}>
+                  <div style={{ color: '#9f957e', fontSize: '12px' }}>
                     The initial command is optional. Bottom battle chat stays disabled until combat begins.
                   </div>
                   <button
@@ -419,7 +432,7 @@ export function BattleHUD() {
                       color: '#000',
                       cursor: 'pointer',
                       fontFamily: '"NeoDunggeunmoPro", monospace',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       whiteSpace: 'nowrap',
                     }}
                   >

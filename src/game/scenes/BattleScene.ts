@@ -2,7 +2,7 @@ import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { BattleLoop, BattleMapLayout, PlaygroundTargetConfig } from '../systems/BattleLoop';
 import { Obstacle } from '../systems/Obstacles';
-import { BattleResult, BattleMode, Position, UnitRole, PlayerChatMessageEvent } from '../types';
+import { BattleResult, BattleMode, BattleSummaryData, Position, UnitRole, PlayerChatMessageEvent } from '../types';
 import {
   createGroundTilemapLayer,
   getObjectLayerObjects,
@@ -19,12 +19,12 @@ interface BattleSceneData {
 export class BattleScene extends Scene {
   private battleLoop!: BattleLoop;
   private battleResult: BattleResult = null;
-  private returnTimer = 0;
   private sceneData: BattleSceneData = { nodeId: '', difficulty: 1, mode: 'battle' };
   private escapeKey!: Phaser.Input.Keyboard.Key;
   private playerChatHandler?: (message: PlayerChatMessageEvent) => void;
   private battleStartHandler?: () => void;
   private playgroundExitHandler?: () => void;
+  private returnToOverworldHandler?: () => void;
 
   constructor() {
     super('BattleScene');
@@ -33,7 +33,6 @@ export class BattleScene extends Scene {
   init(data: BattleSceneData): void {
     this.sceneData = { ...data, mode: data.mode ?? 'battle' };
     this.battleResult = null;
-    this.returnTimer = 0;
   }
 
   create(): void {
@@ -101,6 +100,11 @@ export class BattleScene extends Scene {
     };
     EventBus.on('playground-exit-requested', this.playgroundExitHandler);
 
+    this.returnToOverworldHandler = () => {
+      this.returnToOverworld();
+    };
+    EventBus.on('return-to-overworld', this.returnToOverworldHandler);
+
     EventBus.emit('current-scene-ready', this);
     EventBus.emit('battle-state-update', this.battleLoop.getState());
   }
@@ -114,11 +118,6 @@ export class BattleScene extends Scene {
     }
 
     if (this.battleResult) {
-      this.returnTimer += dt;
-      if (this.returnTimer >= 3) {
-        this.cleanUp();
-        this.scene.start('OverworldScene');
-      }
       return;
     }
 
@@ -130,29 +129,17 @@ export class BattleScene extends Scene {
     }
 
     this.battleResult = result;
-    const isWin = result === 'allied_win';
-
-    this.add
-      .text(512, 384, isWin ? 'VICTORY!' : 'DEFEAT!', {
-        fontSize: '48px',
-        color: isWin ? '#00ff00' : '#ff0000',
-        fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontStyle: 'bold',
-        stroke: '#000000',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5)
-      .setDepth(100);
-
-    this.add
-      .text(512, 430, 'Returning to overworld...', {
-        fontSize: '14px',
-        color: '#ffffff',
-        fontFamily: '"NeoDunggeunmoPro", monospace',
-      })
-      .setOrigin(0.5)
-      .setDepth(100);
-
+    const state = this.battleLoop.getState();
+    const summaryData: BattleSummaryData = {
+      result,
+      durationSec: state.timeSec,
+      alliedUnits: state.alliedUnits,
+      enemyUnits: state.enemyUnits,
+      heroes: state.heroes,
+      allDamageEvents: this.battleLoop.getAllDamageEvents(),
+      aiStats: this.battleLoop.getAIStats(),
+    };
+    EventBus.emit('battle-summary', summaryData);
     EventBus.emit('battle-ended', result);
   }
 
@@ -168,6 +155,10 @@ export class BattleScene extends Scene {
     if (this.playgroundExitHandler) {
       EventBus.removeListener('playground-exit-requested', this.playgroundExitHandler);
       this.playgroundExitHandler = undefined;
+    }
+    if (this.returnToOverworldHandler) {
+      EventBus.removeListener('return-to-overworld', this.returnToOverworldHandler);
+      this.returnToOverworldHandler = undefined;
     }
     this.battleLoop.destroy();
   }

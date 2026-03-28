@@ -30,7 +30,7 @@ export function CommunicationLog({ messages }: CommunicationLogProps) {
         borderRadius: '6px',
         backgroundColor: '#14100dcc',
         fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontSize: '12px',
+        fontSize: '14px',
         overflow: 'hidden',
       }}
     >
@@ -39,7 +39,7 @@ export function CommunicationLog({ messages }: CommunicationLogProps) {
           padding: '6px 10px',
           borderBottom: '1px solid #3b2c18',
           color: '#ffd700',
-          fontSize: '13px',
+          fontSize: '15px',
         }}
       >
         Communication Log

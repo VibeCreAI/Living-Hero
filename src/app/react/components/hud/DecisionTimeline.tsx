@@ -102,7 +102,7 @@ export function DecisionTimeline({ activeHeroId }: { activeHeroId: string | null
           padding: '3px 6px',
           borderBottom: '1px solid #333',
           color: '#888',
-          fontSize: '11px',
+          fontSize: '13px',
         }}
       >
         Decision Log
@@ -113,7 +113,7 @@ export function DecisionTimeline({ activeHeroId }: { activeHeroId: string | null
           maxHeight: '180px',
           overflowY: 'auto',
           padding: '4px 6px',
-          fontSize: '11px',
+          fontSize: '13px',
         }}
       >
         {entries.map((entry, index) => (

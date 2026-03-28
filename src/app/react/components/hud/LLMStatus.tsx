@@ -18,7 +18,7 @@ export function LLMStatus() {
         alignItems: 'center',
         gap: '5px',
         fontFamily: '"NeoDunggeunmoPro", monospace',
-        fontSize: '11px',
+        fontSize: '13px',
         fontWeight: 400,
         lineHeight: 1.2,
         letterSpacing: '0px',

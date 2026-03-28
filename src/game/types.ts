@@ -157,6 +157,20 @@ export interface BattleState {
 
 export type BattleResult = 'allied_win' | 'enemy_win' | null;
 
+export interface BattleSummaryData {
+  result: 'allied_win' | 'enemy_win';
+  durationSec: number;
+  alliedUnits: UnitState[];
+  enemyUnits: UnitState[];
+  heroes: HeroState[];
+  allDamageEvents: DamageEvent[];
+  aiStats: {
+    llmCallCount: number;
+    fallbackCount: number;
+    lastLatencyMs: number;
+  };
+}
+
 export interface PlayerChatMessageEvent {
   text: string;
   targetHeroIds: string[];

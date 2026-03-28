@@ -178,8 +178,8 @@ export function PlayerChatComposer({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '10px' }}>
-        <div style={{ color: '#ffd700', fontSize: '12px' }}>{title}</div>
-        <div style={{ color: '#8b7a63', fontSize: '10px' }}>{helperText}</div>
+        <div style={{ color: '#ffd700', fontSize: '14px' }}>{title}</div>
+        <div style={{ color: '#8b7a63', fontSize: '12px' }}>{helperText}</div>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px', minHeight: '24px' }}>
@@ -196,14 +196,14 @@ export function PlayerChatComposer({
               color: hero.id === activeHeroId ? '#ffd700' : '#d4c4a1',
               cursor: disabled ? 'not-allowed' : 'pointer',
               fontFamily: '"NeoDunggeunmoPro", monospace',
-              fontSize: '10px',
+              fontSize: '12px',
               opacity: disabled ? 0.7 : 1,
             }}
           >
             @{hero.name}
           </button>
         ))}
-        {visibleRecipients.length === 0 && <div style={{ color: '#6f6759', fontSize: '10px' }}>No active hero selected</div>}
+        {visibleRecipients.length === 0 && <div style={{ color: '#6f6759', fontSize: '12px' }}>No active hero selected</div>}
       </div>
 
       <div style={{ position: 'relative' }}>
@@ -232,7 +232,7 @@ export function PlayerChatComposer({
             padding: '10px 12px',
             boxSizing: 'border-box',
             fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '12px',
+            fontSize: '14px',
             lineHeight: 1.35,
             outline: 'none',
             cursor: disabled ? 'not-allowed' : 'text',
@@ -272,7 +272,7 @@ export function PlayerChatComposer({
                   borderBottom: index === suggestions.length - 1 ? 'none' : '1px solid #2a2110',
                   cursor: 'pointer',
                   fontFamily: '"NeoDunggeunmoPro", monospace',
-                  fontSize: '11px',
+                  fontSize: '13px',
                 }}
               >
                 @{hero.name}
@@ -283,7 +283,7 @@ export function PlayerChatComposer({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', gap: '8px' }}>
-        <div style={{ color: '#7b7467', fontSize: '10px' }}>{disabled ? disabledNote : footerText}</div>
+        <div style={{ color: '#7b7467', fontSize: '12px' }}>{disabled ? disabledNote : footerText}</div>
         <button
           onClick={handleSend}
           disabled={disabled}
@@ -295,7 +295,7 @@ export function PlayerChatComposer({
             color: disabled ? '#1e1a14' : '#111',
             cursor: disabled ? 'not-allowed' : 'pointer',
             fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '11px',
+            fontSize: '13px',
             opacity: disabled ? 0.7 : 1,
           }}
         >

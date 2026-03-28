@@ -10,6 +10,14 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(OllamaState::new()))
         .setup(|app| {
+            // Set window icon from the bundled icon
+            if let Some(window) = app.get_webview_window("main") {
+                let icon_bytes = include_bytes!("../icons/icon.png");
+                if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
+                    let _ = window.set_icon(icon);
+                }
+            }
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 start_ollama(&handle).await;

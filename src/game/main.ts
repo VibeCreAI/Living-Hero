@@ -1,4 +1,4 @@
-import { BootScene } from './scenes/Boot';
+import { PreBootScene, BootScene } from './scenes/Boot';
 import { OverworldScene } from './scenes/OverworldScene';
 import { BattleScene } from './scenes/BattleScene';
 import { AUTO, Game } from 'phaser';
@@ -11,8 +11,9 @@ const config: Phaser.Types.Core.GameConfig = {
   antialias: false,
   roundPixels: true,
   parent: 'game-container',
-  backgroundColor: '#1a4a1a',
+  backgroundColor: '#0a0a0a',
   scene: [
+    PreBootScene,
     BootScene,
     OverworldScene,
     BattleScene,
