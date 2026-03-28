@@ -12,6 +12,15 @@ interface PlayerChatComposerProps {
   activeHeroId: string | null;
   onActiveHeroChange: (heroId: string) => void;
   onSend: (payload: PlayerChatSendPayload) => void;
+  disabled?: boolean;
+  title?: string;
+  helperText?: string;
+  placeholder?: string;
+  sendLabel?: string;
+  footerText?: string;
+  disabledNote?: string;
+  layout?: 'fill' | 'compact';
+  rows?: number;
 }
 
 export function PlayerChatComposer({
@@ -19,6 +28,15 @@ export function PlayerChatComposer({
   activeHeroId,
   onActiveHeroChange,
   onSend,
+  disabled = false,
+  title = 'Command Hero',
+  helperText = 'Type @ to choose a hero target',
+  placeholder = 'Type @Commander then your order...',
+  sendLabel = 'Send',
+  footerText = 'Enter sends. Shift+Enter makes a new line.',
+  disabledNote = 'Unavailable right now.',
+  layout = 'fill',
+  rows = 2,
 }: PlayerChatComposerProps) {
   const [input, setInput] = useState('');
   const [caretIndex, setCaretIndex] = useState(0);
@@ -27,7 +45,7 @@ export function PlayerChatComposer({
 
   const mentionContext = useMemo(() => getMentionContext(input, caretIndex), [input, caretIndex]);
   const suggestions = useMemo(() => {
-    if (!mentionContext) {
+    if (disabled || !mentionContext) {
       return [];
     }
 
@@ -58,7 +76,7 @@ export function PlayerChatComposer({
   }, [activeHeroId, heroes, onActiveHeroChange]);
 
   const insertMention = (hero: HeroState) => {
-    if (!mentionContext) {
+    if (disabled || !mentionContext) {
       return;
     }
 
@@ -78,6 +96,10 @@ export function PlayerChatComposer({
   };
 
   const handleSend = () => {
+    if (disabled) {
+      return;
+    }
+
     const displayText = input.trim();
     if (!displayText) {
       return;
@@ -108,6 +130,10 @@ export function PlayerChatComposer({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
 
+    if (disabled) {
+      return;
+    }
+
     if (suggestions.length > 0 && mentionContext) {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -137,22 +163,23 @@ export function PlayerChatComposer({
   return (
     <div
       style={{
-        height: '100%',
+        height: layout === 'fill' ? '100%' : 'auto',
         boxSizing: 'border-box',
         border: '1px solid #4b3a1d',
         borderRadius: '8px',
-        backgroundColor: '#120e08ee',
+        backgroundColor: disabled ? '#0f0b07e8' : '#120e08ee',
         boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
         padding: '10px 12px',
         fontFamily: '"NeoDunggeunmoPro", monospace',
         pointerEvents: 'auto',
         display: 'flex',
         flexDirection: 'column',
+        opacity: disabled ? 0.78 : 1,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '10px' }}>
-        <div style={{ color: '#ffd700', fontSize: '12px' }}>Command Hero</div>
-        <div style={{ color: '#8b7a63', fontSize: '10px' }}>Type @ to choose a hero target</div>
+        <div style={{ color: '#ffd700', fontSize: '12px' }}>{title}</div>
+        <div style={{ color: '#8b7a63', fontSize: '10px' }}>{helperText}</div>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px', minHeight: '24px' }}>
@@ -160,15 +187,17 @@ export function PlayerChatComposer({
           <button
             key={hero.id}
             onClick={() => onActiveHeroChange(hero.id)}
+            disabled={disabled}
             style={{
               padding: '3px 8px',
               borderRadius: '999px',
               border: hero.id === activeHeroId ? '1px solid #ffd700' : '1px solid #5c4a28',
               backgroundColor: hero.id === activeHeroId ? '#2a2110' : '#17120b',
               color: hero.id === activeHeroId ? '#ffd700' : '#d4c4a1',
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
               fontFamily: '"NeoDunggeunmoPro", monospace',
               fontSize: '10px',
+              opacity: disabled ? 0.7 : 1,
             }}
           >
             @{hero.name}
@@ -189,22 +218,24 @@ export function PlayerChatComposer({
           onKeyDown={handleKeyDown}
           onKeyUp={(event) => event.stopPropagation()}
           onFocus={(event) => setCaretIndex(event.currentTarget.selectionStart ?? 0)}
-          placeholder="Type @Commander then your order..."
-          rows={2}
+          placeholder={placeholder}
+          rows={rows}
+          disabled={disabled}
           style={{
             width: '100%',
-            minHeight: '62px',
+            minHeight: rows >= 3 ? '86px' : '62px',
             resize: 'none',
             borderRadius: '6px',
             border: '1px solid #3e311b',
-            backgroundColor: '#0b0907',
-            color: '#f4efe0',
+            backgroundColor: disabled ? '#090705' : '#0b0907',
+            color: disabled ? '#8f8778' : '#f4efe0',
             padding: '10px 12px',
             boxSizing: 'border-box',
             fontFamily: '"NeoDunggeunmoPro", monospace',
             fontSize: '12px',
             lineHeight: 1.35,
             outline: 'none',
+            cursor: disabled ? 'not-allowed' : 'text',
           }}
         />
 
@@ -252,21 +283,23 @@ export function PlayerChatComposer({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', gap: '8px' }}>
-        <div style={{ color: '#7b7467', fontSize: '10px' }}>Enter sends. Shift+Enter makes a new line.</div>
+        <div style={{ color: '#7b7467', fontSize: '10px' }}>{disabled ? disabledNote : footerText}</div>
         <button
           onClick={handleSend}
+          disabled={disabled}
           style={{
             padding: '6px 12px',
             borderRadius: '6px',
             border: '1px solid #7d5a1b',
-            backgroundColor: '#ffd700',
-            color: '#111',
-            cursor: 'pointer',
+            backgroundColor: disabled ? '#635739' : '#ffd700',
+            color: disabled ? '#1e1a14' : '#111',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             fontFamily: '"NeoDunggeunmoPro", monospace',
             fontSize: '11px',
+            opacity: disabled ? 0.7 : 1,
           }}
         >
-          Send
+          {sendLabel}
         </button>
       </div>
     </div>

@@ -55,7 +55,7 @@ export function CommunicationLog({ messages }: CommunicationLogProps) {
         }}
       >
         {messages.length === 0 && (
-          <div style={{ color: '#726a5c' }}>Send an order from the bottom comms bar to start the conversation.</div>
+          <div style={{ color: '#726a5c' }}>Send an order to start the conversation.</div>
         )}
         {messages.filter((m) => m.sender !== 'system').map((message) => (
           <div key={message.id} style={{ marginBottom: '8px' }}>
