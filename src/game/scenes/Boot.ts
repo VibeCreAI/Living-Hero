@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { ENEMY_VARIANT_DEFINITIONS } from '../data/enemyVariants';
 
 /**
  * PreBootScene loads only the logo, then hands off to BootScene
@@ -65,6 +66,10 @@ export class BootScene extends Scene {
 
     this.load.image('castle-blue', 'assets/Buildings/Blue Buildings/Castle.png');
     this.load.image('castle-red', 'assets/Buildings/Red Buildings/Castle.png');
+    this.load.spritesheet('portal-main', 'assets/Buildings/portal_main.png', {
+      frameWidth: 128,
+      frameHeight: 128,
+    });
     this.load.image('terrain-tileset', 'assets/Terrain/Tileset/Tilemap_color1.png');
     this.load.image('terrain-tileset-alt', 'assets/Terrain/Tileset/Tilemap_color3.png');
     this.load.image('terrain-rock-1', 'assets/Terrain/Decorations/Rocks/Rock1.png');
@@ -95,6 +100,21 @@ export class BootScene extends Scene {
     this.load.tilemapTiledJSON('overworld-map', 'assets/maps/overworld.json');
     this.load.tilemapTiledJSON('battlefield-map', 'assets/maps/battlefield.json');
     this.load.tilemapTiledJSON('playground-map', 'assets/maps/playground.json');
+
+    for (const variant of Object.values(ENEMY_VARIANT_DEFINITIONS)) {
+      this.load.spritesheet(variant.idle.textureKey, variant.idle.assetPath, {
+        frameWidth: variant.idle.frameWidth,
+        frameHeight: variant.idle.frameHeight,
+      });
+      this.load.spritesheet(variant.run.textureKey, variant.run.assetPath, {
+        frameWidth: variant.run.frameWidth,
+        frameHeight: variant.run.frameHeight,
+      });
+      this.load.spritesheet(variant.attack.textureKey, variant.attack.assetPath, {
+        frameWidth: variant.attack.frameWidth,
+        frameHeight: variant.attack.frameHeight,
+      });
+    }
   }
 
   create(): void {
@@ -114,6 +134,13 @@ export class BootScene extends Scene {
     this.anims.create({ key: 'red-archer-idle-anim', frames: this.anims.generateFrameNumbers('red-archer-idle', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'red-archer-run-anim', frames: this.anims.generateFrameNumbers('red-archer-run', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'red-archer-attack-anim', frames: this.anims.generateFrameNumbers('red-archer-attack', { start: 0, end: 7 }), frameRate: 8, repeat: 0 });
+    this.anims.create({ key: 'portal-main-anim', frames: this.anims.generateFrameNumbers('portal-main', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+
+    for (const variant of Object.values(ENEMY_VARIANT_DEFINITIONS)) {
+      createAnimation(this, `${variant.animationPrefix}-idle-anim`, variant.idle.textureKey, variant.idle.frameCount, 8, -1);
+      createAnimation(this, `${variant.animationPrefix}-run-anim`, variant.run.textureKey, variant.run.frameCount, 8, -1);
+      createAnimation(this, `${variant.animationPrefix}-attack-anim`, variant.attack.textureKey, variant.attack.frameCount, 8, 0);
+    }
 
     const fontLoad = document.fonts?.load('16px "NeoDunggeunmoPro"');
     if (!fontLoad) {
@@ -129,4 +156,24 @@ export class BootScene extends Scene {
         this.scene.start('OverworldScene');
       });
   }
+}
+
+function createAnimation(
+  scene: Scene,
+  key: string,
+  textureKey: string,
+  frameCount: number,
+  frameRate: number,
+  repeat: number
+): void {
+  if (scene.anims.exists(key)) {
+    return;
+  }
+
+  scene.anims.create({
+    key,
+    frames: scene.anims.generateFrameNumbers(textureKey, { start: 0, end: frameCount - 1 }),
+    frameRate,
+    repeat,
+  });
 }

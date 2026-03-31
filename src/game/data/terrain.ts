@@ -1,33 +1,23 @@
 import { OverworldNode } from '../types';
+import { PORTAL_LABEL, PORTAL_NODE_ID } from './portalFloors';
 
 export const OVERWORLD_NODES: OverworldNode[] = [
   {
     id: 'node-playground',
     position: { x: 180, y: 160 },
     label: 'Training Grounds',
+    kind: 'node',
     difficulty: 0,
     completed: false,
     mode: 'playground',
   },
   {
-    id: 'node-1',
-    position: { x: 300, y: 250 },
-    label: 'Forest Camp',
+    id: PORTAL_NODE_ID,
+    position: { x: 512, y: 384 },
+    label: PORTAL_LABEL,
+    kind: 'portal',
     difficulty: 1,
     completed: false,
-  },
-  {
-    id: 'node-2',
-    position: { x: 550, y: 450 },
-    label: 'Bandit Fort',
-    difficulty: 1.5,
-    completed: false,
-  },
-  {
-    id: 'node-3',
-    position: { x: 800, y: 300 },
-    label: 'Dark Keep',
-    difficulty: 2,
-    completed: false,
+    mode: 'battle',
   },
 ];

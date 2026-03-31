@@ -134,7 +134,7 @@ export function DecisionTimeline({ activeHeroId }: { activeHeroId: string | null
             <DetailRow label="Army" value={entry.armyPlan} color="#ffd700" />
             <DetailRow label="Hero" value={entry.heroPlan} color="#f3c86b" />
             <DetailRow label="Warriors" value={entry.warriorPlan} color="#ff9d66" />
-            <DetailRow label="Archers" value={entry.archerPlan} color="#8fc7ff" />
+            <DetailRow label="Ranged" value={entry.archerPlan} color="#8fc7ff" />
           </div>
         ))}
       </div>

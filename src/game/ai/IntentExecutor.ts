@@ -31,6 +31,9 @@ const HERO_PROTECT_LEASH = 180;
 const WARRIOR_RETREAT_LEASH = 110;
 const ARCHER_RETREAT_LEASH = 90;
 const HERO_RETREAT_LEASH = 110;
+const FORMATION_SLOT_STICKINESS = 1.6;
+const HERO_ANCHOR_BIAS = 0.85;
+const ORDER_TILE_RETENTION_RADIUS = 2.5;
 
 interface RoleOrderSpec {
   mode: UnitOrderMode;
@@ -84,10 +87,10 @@ const ARCHER_TEMPLATE: FormationTemplate = [
 ];
 
 const HERO_TEMPLATE: FormationTemplate = [
+  { forward: 0, side: 0 },
   { forward: 1, side: 0 },
   { forward: 1, side: -1 },
   { forward: 1, side: 1 },
-  { forward: 0, side: 0 },
   { forward: 0, side: -1 },
   { forward: 0, side: 1 },
   { forward: -1, side: 0 },
@@ -393,7 +396,7 @@ export class IntentExecutor {
 
     const otherAllies = formationUnits.filter((ally) => ally.id !== unit.id);
     const occupiedTiles = otherAllies.map((ally) => ally.state.tile);
-    const scoredCandidates: Array<{ tile: TileCoord; cost: number }> = [];
+    const scoredCandidates = new Map<string, { tile: TileCoord; cost: number }>();
 
     for (const offset of template) {
       const candidate = this.battleGrid.findNearestWalkableTile({
@@ -405,13 +408,24 @@ export class IntentExecutor {
         continue;
       }
 
-      const cost = this.battleGrid.estimatePathCost(unit.state.tile, candidate, {
-        occupiedTiles,
+      scoredCandidates.set(key, {
+        tile: candidate,
+        cost: this.scoreFormationCandidate(unit, candidate, anchorTile, occupiedTiles),
       });
-      scoredCandidates.push({ tile: candidate, cost });
     }
 
-    scoredCandidates.sort((a, b) => {
+    const retainedOrderTile = this.resolveRetainedOrderTile(unit, anchorTile, claimed);
+    if (retainedOrderTile) {
+      const retainedKey = this.battleGrid.tileKey(retainedOrderTile);
+      if (!scoredCandidates.has(retainedKey)) {
+        scoredCandidates.set(retainedKey, {
+          tile: retainedOrderTile,
+          cost: this.scoreFormationCandidate(unit, retainedOrderTile, anchorTile, occupiedTiles),
+        });
+      }
+    }
+
+    const orderedCandidates = [...scoredCandidates.values()].sort((a, b) => {
       if (a.cost !== b.cost) {
         return a.cost - b.cost;
       }
@@ -421,9 +435,53 @@ export class IntentExecutor {
       return a.tile.col - b.tile.col;
     });
 
-    const selected = scoredCandidates[0]?.tile ?? this.battleGrid.findNearestWalkableTile(anchorTile);
+    const selected = orderedCandidates[0]?.tile ?? this.battleGrid.findNearestWalkableTile(anchorTile);
     claimed.add(this.battleGrid.tileKey(selected));
     return selected;
+  }
+
+  private scoreFormationCandidate(
+    unit: Unit,
+    candidate: TileCoord,
+    anchorTile: TileCoord,
+    occupiedTiles: TileCoord[]
+  ): number {
+    if (!this.battleGrid) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    let cost = this.battleGrid.estimatePathCost(unit.state.tile, candidate, {
+      occupiedTiles,
+    });
+
+    if (unit.state.orderTile && this.battleGrid.tilesEqual(unit.state.orderTile, candidate)) {
+      cost -= FORMATION_SLOT_STICKINESS;
+    }
+
+    if (unit.state.role === 'hero' && this.battleGrid.tilesEqual(candidate, anchorTile)) {
+      cost -= HERO_ANCHOR_BIAS;
+    }
+
+    return cost;
+  }
+
+  private resolveRetainedOrderTile(
+    unit: Unit,
+    anchorTile: TileCoord,
+    claimed: Set<string>
+  ): TileCoord | undefined {
+    if (!this.battleGrid || !unit.state.orderTile) {
+      return undefined;
+    }
+
+    const retained = this.battleGrid.findNearestWalkableTile(unit.state.orderTile);
+    if (claimed.has(this.battleGrid.tileKey(retained))) {
+      return undefined;
+    }
+
+    return this.battleGrid.distance(retained, anchorTile) <= ORDER_TILE_RETENTION_RADIUS
+      ? retained
+      : undefined;
   }
 
   private getForwardVector(anchorTile: TileCoord, context: RoleExecutionContext): TileCoord {

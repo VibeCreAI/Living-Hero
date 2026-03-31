@@ -11,6 +11,17 @@ interface BattleSummaryProps {
 export function BattleSummary({ data, messages }: BattleSummaryProps) {
   const stats = useMemo(() => computeStats(data, messages), [data, messages]);
   const isWin = data.result === 'allied_win';
+  const floorLabel = data.floorNumber ? `Floor ${data.floorNumber}` : 'Battle';
+  const outcomeLabel =
+    isWin && data.floorNumber
+      ? `${floorLabel} Cleared`
+      : !isWin && data.floorNumber
+        ? `${floorLabel} Failed`
+        : isWin
+          ? 'Battle Won'
+          : 'Battle Lost';
+  const retryLabel = data.floorNumber ? `Retry Floor ${data.floorNumber}` : 'Restart Battle';
+  const advanceLabel = data.nextFloor ? `Advance to Floor ${data.nextFloor}` : null;
 
   return (
     <div
@@ -61,6 +72,10 @@ export function BattleSummary({ data, messages }: BattleSummaryProps) {
           <div style={{ fontSize: '13px', color: '#9f957e', marginTop: '4px' }}>
             Battle Duration: {formatDuration(data.durationSec)}
           </div>
+          <div style={{ fontSize: '13px', color: '#cdbd97', marginTop: '6px' }}>
+            {outcomeLabel}
+            {isWin && data.floorNumber === data.maxFloor ? ' • Portal apex reached' : ''}
+          </div>
         </div>
 
         <Divider />
@@ -69,12 +84,12 @@ export function BattleSummary({ data, messages }: BattleSummaryProps) {
         <Section title="Casualties">
           <StatRow label="Allied Surviving" value={stats.alliedSurviving} color="#4488ff" />
           <StatRow label="  Warriors" value={stats.alliedWarriorsSurviving} color="#4488ff" />
-          <StatRow label="  Archers" value={stats.alliedArchersSurviving} color="#4488ff" />
+          <StatRow label="  Ranged" value={stats.alliedArchersSurviving} color="#4488ff" />
           <StatRow label="  Hero" value={stats.heroAlive ? 'Alive' : 'Fallen'} color={stats.heroAlive ? '#00ff00' : '#ff4444'} />
           <div style={{ height: '4px' }} />
           <StatRow label="Enemies Killed" value={stats.enemiesKilled} color="#ff6644" />
           <StatRow label="  Warriors" value={stats.enemyWarriorsKilled} color="#ff6644" />
-          <StatRow label="  Archers" value={stats.enemyArchersKilled} color="#ff6644" />
+          <StatRow label="  Ranged" value={stats.enemyArchersKilled} color="#ff6644" />
         </Section>
 
         {/* Damage Summary */}
@@ -118,25 +133,66 @@ export function BattleSummary({ data, messages }: BattleSummaryProps) {
           </Section>
         )}
 
-        {/* Return Button */}
-        <button
-          onClick={() => EventBus.emit('return-to-overworld')}
+        <div
           style={{
             marginTop: '4px',
-            padding: '10px 16px',
-            borderRadius: '6px',
-            border: '1px solid #8b5a2b',
-            backgroundColor: '#ffd700',
-            color: '#000',
-            cursor: 'pointer',
-            fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '15px',
-            fontWeight: 'bold',
-            alignSelf: 'center',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '10px',
+            flexWrap: 'wrap',
           }}
         >
-          Return to Overworld
-        </button>
+          <button
+            onClick={() => EventBus.emit('replay-battle')}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '6px',
+              border: '1px solid #8b5a2b',
+              backgroundColor: isWin ? '#7cff6b' : '#ffb347',
+              color: '#000',
+              cursor: 'pointer',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
+              fontSize: '15px',
+              fontWeight: 'bold',
+            }}
+          >
+            {retryLabel}
+          </button>
+          {data.canAdvance && advanceLabel && (
+            <button
+              onClick={() => EventBus.emit('advance-to-next-floor')}
+              style={{
+                padding: '10px 16px',
+                borderRadius: '6px',
+                border: '1px solid #8b5a2b',
+                backgroundColor: '#8fe16f',
+                color: '#000',
+                cursor: 'pointer',
+                fontFamily: '"NeoDunggeunmoPro", monospace',
+                fontSize: '15px',
+                fontWeight: 'bold',
+              }}
+            >
+              {advanceLabel}
+            </button>
+          )}
+          <button
+            onClick={() => EventBus.emit('return-to-overworld')}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '6px',
+              border: '1px solid #8b5a2b',
+              backgroundColor: '#ffd700',
+              color: '#000',
+              cursor: 'pointer',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
+              fontSize: '15px',
+              fontWeight: 'bold',
+            }}
+          >
+            Return to Overworld
+          </button>
+        </div>
       </div>
     </div>
   );

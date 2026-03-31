@@ -350,7 +350,7 @@ function extractGroupClauses(playerMessage: string): Array<{ group: UnitGroup; d
     .split(/\bwhile\b|;|\bmeanwhile\b/)
     .flatMap((segment) =>
       segment.split(
-        /\band\b(?=\s*(?:(?:send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(?:archers?|warriors?|hero(?:es)?|commander)\b)/
+        /\band\b(?=\s*(?:(?:send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(?:archers?|warriors?|ranged(?:\s+units?)?|hero(?:es)?|commander)\b)/
       )
     )
     .map((segment) => segment.trim())
@@ -359,7 +359,7 @@ function extractGroupClauses(playerMessage: string): Array<{ group: UnitGroup; d
   const clauses: Array<{ group: UnitGroup; directive: string }> = [];
   for (const segment of rawSegments) {
     const groupMatch = segment.match(
-      /^(?:(send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(archers?|warriors?|hero(?:es)?|commander)\b/
+      /^(?:(send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(archers?|warriors?|ranged(?:\s+units?)?|hero(?:es)?|commander)\b/
     );
     if (!groupMatch) {
       continue;
@@ -373,7 +373,7 @@ function extractGroupClauses(playerMessage: string): Array<{ group: UnitGroup; d
 
     const rest = segment
       .replace(
-        /^(?:(?:send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(?:archers?|warriors?|hero(?:es)?|commander)\b/,
+        /^(?:(?:send|move|position|place|deploy|keep|have|let|tell|make|order)\s+)?(?:(?:only|just)\s+)?(?:our\s+|the\s+|all\s+)?(?:archers?|warriors?|ranged(?:\s+units?)?|hero(?:es)?|commander)\b/,
         ''
       )
       .replace(/\band\s+(?:attack|fire|shoot)(?:\s+from\s+there)?\b.*$/, '')
@@ -409,6 +409,7 @@ function normalizeGroupLeadVerb(rawVerb: string | undefined): string {
 
 function toUnitGroup(token: string): UnitGroup | null {
   if (token.startsWith('archer')) return 'archers';
+  if (token.startsWith('ranged')) return 'archers';
   if (token.startsWith('hero') || token === 'commander') return 'hero';
   if (token.startsWith('warrior')) return 'warriors';
   return null;
@@ -471,8 +472,11 @@ function resolveNamedUnit(
     return bestMatch;
   }
 
-  const role =
-    message.includes('archer') ? 'archer' : message.includes('warrior') ? 'warrior' : undefined;
+  const role = hasWord(message, ['archer', 'archers', 'ranged'])
+    ? 'archer'
+    : hasWord(message, ['warrior', 'warriors', 'melee'])
+      ? 'warrior'
+      : undefined;
   if (!role) {
     return undefined;
   }

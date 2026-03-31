@@ -431,6 +431,11 @@
               "name": "mode",
               "type": "string",
               "value": "playground"
+            },
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "node"
             }
           ]
         },
@@ -438,83 +443,37 @@
           "id": 3,
           "rotation": 0,
           "visible": true,
-          "name": "Forest Camp",
+          "name": "Abyss Portal",
           "type": "node",
-          "x": 308,
-          "y": 250,
-          "width": 64,
-          "height": 64,
+          "x": 512,
+          "y": 384,
+          "width": 128,
+          "height": 128,
           "properties": [
             {
               "name": "id",
               "type": "string",
-              "value": "node-1"
+              "value": "portal-main"
             },
             {
               "name": "label",
               "type": "string",
-              "value": "Forest Camp"
+              "value": "Abyss Portal"
             },
             {
               "name": "difficulty",
               "type": "float",
               "value": 1
-            }
-          ]
-        },
-        {
-          "id": 4,
-          "rotation": 0,
-          "visible": true,
-          "name": "Bandit Fort",
-          "type": "node",
-          "x": 558,
-          "y": 450,
-          "width": 64,
-          "height": 64,
-          "properties": [
-            {
-              "name": "id",
-              "type": "string",
-              "value": "node-2"
             },
             {
-              "name": "label",
+              "name": "mode",
               "type": "string",
-              "value": "Bandit Fort"
+              "value": "battle"
             },
             {
-              "name": "difficulty",
-              "type": "float",
-              "value": 1.5
-            }
-          ]
-        },
-        {
-          "id": 5,
-          "rotation": 0,
-          "visible": true,
-          "name": "Dark Keep",
-          "type": "node",
-          "x": 808,
-          "y": 300,
-          "width": 64,
-          "height": 64,
-          "properties": [
-            {
-              "name": "id",
+              "name": "kind",
               "type": "string",
-              "value": "node-3"
-            },
-            {
-              "name": "label",
-              "type": "string",
-              "value": "Dark Keep"
-            },
-            {
-              "name": "difficulty",
-              "type": "float",
-              "value": 2
+              "value": "portal"
             }
           ]
         }

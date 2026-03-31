@@ -31,6 +31,15 @@ export type BattleGridConfig = Omit<BattleGridSummary, 'blockedTiles' | 'tactica
 // Unit types
 export type UnitFaction = 'allied' | 'enemy';
 export type UnitRole = 'warrior' | 'archer' | 'hero';
+export type EnemyVariantId =
+  | 'skull'
+  | 'harpoon-fish'
+  | 'lancer'
+  | 'shaman'
+  | 'minotaur'
+  | 'gnoll';
+export type PortalFloorNumber = 1 | 2 | 3;
+export type PortalClearedFloor = 0 | PortalFloorNumber;
 export type UnitAnimState = 'idle' | 'moving' | 'attacking' | 'dead';
 export type UnitOrderMode = 'advance' | 'focus' | 'hold' | 'protect' | 'retreat';
 export type UnitGroup = 'all' | 'hero' | 'warriors' | 'archers';
@@ -48,6 +57,7 @@ export interface UnitState {
   id: string;
   faction: UnitFaction;
   role: UnitRole;
+  variantId?: EnemyVariantId;
   displayName?: string;
   assignedHeroId?: string;
   tile: TileCoord;
@@ -176,7 +186,11 @@ export type BattleMode = 'battle' | 'playground';
 export type BattlePhase = 'init' | 'active' | 'ended';
 
 export interface BattleState {
+  sessionId: string;
+  nodeId: string;
   mode: BattleMode;
+  floorNumber?: PortalFloorNumber;
+  maxFloor?: PortalFloorNumber;
   grid: BattleGridSummary;
   timeSec: number;
   phase: BattlePhase;
@@ -191,6 +205,11 @@ export type BattleResult = 'allied_win' | 'enemy_win' | null;
 
 export interface BattleSummaryData {
   result: 'allied_win' | 'enemy_win';
+  nodeId: string;
+  floorNumber?: PortalFloorNumber;
+  maxFloor?: PortalFloorNumber;
+  canAdvance: boolean;
+  nextFloor: PortalFloorNumber | null;
   durationSec: number;
   alliedUnits: UnitState[];
   enemyUnits: UnitState[];
@@ -228,7 +247,13 @@ export interface OverworldNode {
   id: string;
   position: Position;
   label: string;
+  kind: 'portal' | 'node';
   difficulty: number; // enemy count multiplier
   completed: boolean;
   mode?: BattleMode;
+}
+
+export interface PortalProgressState {
+  highestUnlockedFloor: PortalFloorNumber;
+  highestClearedFloor: PortalClearedFloor;
 }

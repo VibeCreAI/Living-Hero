@@ -80,26 +80,31 @@ export class HeroScheduler {
       }
 
       const summary = buildHeroSummary(hero.state, battleState);
+      const activeDirective = incomingDirective ?? summary.currentDirective;
+      const parsedDirective = activeDirective
+        ? interpretPlayerMessage(summary, activeDirective, this.terrainDescription)
+        : null;
 
       // ── Interim decision: apply parsed directive immediately while LLM processes ──
-      if (incomingDirective && this.ollamaBrain) {
-        const parsed = interpretPlayerMessage(summary, incomingDirective, this.terrainDescription);
-        if (parsed) {
-          // Emit parsed event for UI feedback
-          EventBus.emit('directive-parsed', {
-            heroId,
-            heroName: hero.state.name,
-            directive: incomingDirective,
-            parsedIntent: parsed.intent,
-            parsedGroupOrders: parsed.groupOrders,
-          });
+      if (incomingDirective && this.ollamaBrain && parsedDirective) {
+        // Emit parsed event for UI feedback
+        EventBus.emit('directive-parsed', {
+          heroId,
+          heroName: hero.state.name,
+          directive: incomingDirective,
+          parsedIntent: parsedDirective.intent,
+          parsedGroupOrders: parsedDirective.groupOrders,
+        });
 
-          // Apply interim decision so units move immediately
-          const interimDecision = this.applyDirectiveStructure(summary, parsed);
-          this.baseDecisions.set(heroId, interimDecision);
-          hero.setDecision(interimDecision);
-          this.intentExecutor.execute(hero, interimDecision, alliedUnits, enemyUnits);
-        }
+        // Apply interim decision so units move immediately
+        const interimDecision = this.applyDirectiveStructure(
+          summary,
+          parsedDirective,
+          parsedDirective
+        );
+        this.baseDecisions.set(heroId, interimDecision);
+        hero.setDecision(interimDecision);
+        this.intentExecutor.execute(hero, interimDecision, alliedUnits, enemyUnits);
       }
 
       let queuedChatResponse: string | undefined;
@@ -108,9 +113,27 @@ export class HeroScheduler {
       const queuedResult = this.queuedResults.get(heroId);
       if (queuedResult) {
         this.queuedResults.delete(heroId);
-        const structuredDecision = this.applyDirectiveStructure(summary, queuedResult.decision);
+        const resolvedQueuedDecision = this.resolveQueuedDecision(
+          queuedResult,
+          activeDirective,
+          parsedDirective
+        );
+        if (resolvedQueuedDecision.parsedDecision && activeDirective) {
+          EventBus.emit('directive-parsed', {
+            heroId,
+            heroName: hero.state.name,
+            directive: activeDirective,
+            parsedIntent: resolvedQueuedDecision.parsedDecision.intent,
+            parsedGroupOrders: resolvedQueuedDecision.parsedDecision.groupOrders,
+          });
+        }
+        const structuredDecision = this.applyDirectiveStructure(
+          summary,
+          resolvedQueuedDecision.decision,
+          parsedDirective
+        );
         this.baseDecisions.set(heroId, structuredDecision);
-        queuedChatResponse = queuedResult.chatResponse;
+        queuedChatResponse = resolvedQueuedDecision.chatResponse;
         this.timers.set(heroId, 0);
       }
 
@@ -151,10 +174,11 @@ export class HeroScheduler {
       // ── Request new decision ──
       if (this.ollamaBrain) {
         this.pendingHeroes.add(heroId);
-        const directive = incomingDirective;
-        directiveConsumed = !directive ? directiveConsumed : true;
+        const directive = activeDirective;
+        directiveConsumed = !incomingDirective ? directiveConsumed : true;
         const requestVersion = (this.requestVersions.get(heroId) ?? 0) + 1;
         this.requestVersions.set(heroId, requestVersion);
+        const announceDirectiveInterpretation = Boolean(incomingDirective && !parsedDirective);
 
         this.ollamaBrain
           .decideAsync(summary, directive, this.terrainDescription)
@@ -165,6 +189,8 @@ export class HeroScheduler {
             this.queuedResults.set(heroId, {
               decision: result.decision,
               chatResponse: result.chatResponse,
+              playerOrderInterpretation: result.playerOrderInterpretation,
+              announceDirectiveInterpretation,
             });
           })
           .catch(() => {
@@ -187,13 +213,12 @@ export class HeroScheduler {
           });
       } else {
         // No LLM — synchronous path
-        const directive = incomingDirective;
-        directiveConsumed = !directive ? directiveConsumed : true;
+        const directive = activeDirective;
+        directiveConsumed = !incomingDirective ? directiveConsumed : true;
         const decision = directive
-          ? interpretPlayerMessage(summary, directive, this.terrainDescription)
-            ?? this.decisionProvider.decide(summary)
+          ? parsedDirective ?? this.decisionProvider.decide(summary)
           : this.decisionProvider.decide(summary);
-        const structuredDecision = this.applyDirectiveStructure(summary, decision);
+        const structuredDecision = this.applyDirectiveStructure(summary, decision, parsedDirective);
         const activeDecision = this.stabilizeDecision(
           heroId,
           summary,
@@ -202,15 +227,17 @@ export class HeroScheduler {
         this.baseDecisions.set(heroId, structuredDecision);
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
-        if (directive) {
+        if (incomingDirective && parsedDirective) {
           // Emit parsed event for UI
           EventBus.emit('directive-parsed', {
             heroId,
             heroName: hero.state.name,
-            directive,
+            directive: incomingDirective,
             parsedIntent: decision.intent,
             parsedGroupOrders: decision.groupOrders,
           });
+        }
+        if (incomingDirective) {
           const response = this.buildFallbackAck(activeDecision);
           hero.setSpeech(response);
           EventBus.emit('hero-chat-response', {
@@ -364,14 +391,18 @@ export class HeroScheduler {
 
   private applyDirectiveStructure(
     summary: HeroSummary,
-    decision: HeroDecision
+    decision: HeroDecision,
+    parsedDirectiveOverride?: HeroDecision | null
   ): HeroDecision {
     const directive = summary.currentDirective;
     if (!directive) {
       return decision;
     }
 
-    const parsedDirective = interpretPlayerMessage(summary, directive, this.terrainDescription);
+    const parsedDirective =
+      parsedDirectiveOverride !== undefined
+        ? parsedDirectiveOverride
+        : interpretPlayerMessage(summary, directive, this.terrainDescription);
     if (!parsedDirective) {
       return decision;
     }
@@ -509,11 +540,42 @@ export class HeroScheduler {
 
     return [...merged.values()];
   }
+
+  private resolveQueuedDecision(
+    queuedResult: QueuedDecisionResult,
+    directive: string | undefined,
+    parsedDirective: HeroDecision | null
+  ): ResolvedQueuedDecision {
+    if (!directive || parsedDirective || !queuedResult.playerOrderInterpretation) {
+      return {
+        decision: queuedResult.decision,
+        chatResponse: queuedResult.chatResponse,
+      };
+    }
+
+    return {
+      decision: queuedResult.playerOrderInterpretation,
+      chatResponse: queuedResult.announceDirectiveInterpretation
+        ? this.buildFallbackAck(queuedResult.playerOrderInterpretation)
+        : undefined,
+      parsedDecision: queuedResult.announceDirectiveInterpretation
+        ? queuedResult.playerOrderInterpretation
+        : undefined,
+    };
+  }
 }
 
 interface QueuedDecisionResult {
   decision: HeroDecision;
   chatResponse?: string;
+  playerOrderInterpretation?: HeroDecision;
+  announceDirectiveInterpretation?: boolean;
+}
+
+interface ResolvedQueuedDecision {
+  decision: HeroDecision;
+  chatResponse?: string;
+  parsedDecision?: HeroDecision;
 }
 
 interface ReactiveDecisionLock {

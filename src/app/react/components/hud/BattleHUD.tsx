@@ -17,13 +17,20 @@ export function BattleHUD() {
   const [planningOverlayVisible, setPlanningOverlayVisible] = useState(false);
   const [battleStartPending, setBattleStartPending] = useState(false);
   const messageIdRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const stateHandler = (state: BattleState) => {
-      setBattleState(state);
-      if (state.phase === 'init') {
+      if (sessionIdRef.current !== state.sessionId) {
+        sessionIdRef.current = state.sessionId;
+        setMessages([]);
         setSummaryData(null);
+        setBattleStartPending(false);
+        setPlanningOverlayVisible(state.mode === 'battle' && state.phase === 'init');
+        messageIdRef.current = 0;
       }
+
+      setBattleState(state);
       setActiveHeroId((current) => {
         if (current && state.heroes.some((hero) => hero.id === current)) {
           return current;
@@ -62,7 +69,7 @@ export function BattleHUD() {
       let text = `Parsed: ${event.parsedIntent.replace(/_/g, ' ')}`;
       if (event.parsedGroupOrders?.length) {
         const parts = event.parsedGroupOrders.map(
-          (go) => `${go.group}: ${go.intent.replace(/_/g, ' ')}`
+          (go) => `${formatGroupLabel(go.group)}: ${go.intent.replace(/_/g, ' ')}`
         );
         text = `Parsed: ${parts.join(' | ')}`;
       }
@@ -105,6 +112,12 @@ export function BattleHUD() {
   const timeSec = battleState?.timeSec ?? 0;
   const isPlayground = battleState?.mode === 'playground';
   const isPlanning = battleState?.mode === 'battle' && battleState.phase === 'init';
+  const battleTitle =
+    isPlayground
+      ? 'PLAYGROUND'
+      : battleState?.floorNumber
+        ? `FLOOR ${battleState.floorNumber}`
+        : 'BATTLE';
   const currentDecision = activeHero?.currentDecision;
   const currentDirective = activeHero?.currentDirective;
   const armyPlan = formatPlan(currentDecision);
@@ -180,7 +193,7 @@ export function BattleHUD() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: isPlayground ? '#ffcc66' : '#ff6644', fontSize: '17px' }}>
-            {isPlayground ? 'PLAYGROUND' : 'BATTLE'}
+            {battleTitle}
           </span>
           <LLMStatus />
         </div>
@@ -277,7 +290,7 @@ export function BattleHUD() {
           <PlanRow label="Army" value={armyPlan} color="#ffd700" />
           <PlanRow label="Hero" value={heroPlan} color="#f3c86b" />
           <PlanRow label="Warriors" value={warriorPlan} color="#ff9d66" />
-          <PlanRow label="Archers" value={archerPlan} color="#8fc7ff" />
+          <PlanRow label="Ranged" value={archerPlan} color="#8fc7ff" />
         </div>
 
         <DecisionTimeline activeHeroId={activeHero?.id ?? null} />
@@ -530,4 +543,8 @@ function formatPlan(
   }
 
   return parts.join(' ');
+}
+
+function formatGroupLabel(group: string): string {
+  return group === 'archers' ? 'ranged' : group;
 }

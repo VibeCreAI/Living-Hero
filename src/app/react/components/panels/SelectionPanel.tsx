@@ -112,7 +112,7 @@ function HeroInfo({ hero }: { hero: HeroState }) {
           )}
           {decision.groupOrders?.map((groupOrder) => (
             <div key={groupOrder.group}>
-              {groupOrder.group}: {groupOrder.intent.replace(/_/g, ' ')}
+              {formatGroupLabel(groupOrder.group)}: {groupOrder.intent.replace(/_/g, ' ')}
               {groupOrder.targetId ? ` -> ${groupOrder.targetId}` : ''}
               {groupOrder.moveToTile
                 ? ` @ [${groupOrder.moveToTile.col}, ${groupOrder.moveToTile.row}]`
@@ -127,4 +127,8 @@ function HeroInfo({ hero }: { hero: HeroState }) {
       </div>
     </>
   );
+}
+
+function formatGroupLabel(group: string): string {
+  return group === 'archers' ? 'ranged' : group;
 }

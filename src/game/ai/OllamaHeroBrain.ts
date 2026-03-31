@@ -1,6 +1,11 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
 import { GroupOrder, HeroDecision, HeroSummary } from '../types';
-import { ChatMessage, LLMClient, LLMGroupOrder, LLMRawDecision } from './LLMClient';
+import {
+  ChatMessage,
+  LLMClient,
+  LLMGroupOrder,
+  LLMRawDecisionPlan,
+} from './LLMClient';
 import { buildHeroSystemPrompt } from './heroPrompts';
 import { buildContextPrompt } from './contextBuilder';
 import { LocalRuleBasedHeroBrain } from './LocalRuleBasedHeroBrain';
@@ -14,6 +19,7 @@ import {
 
 export interface OllamaDecisionResult {
   decision: HeroDecision;
+  playerOrderInterpretation?: HeroDecision;
   chatResponse: string;
   positionMenu: TacticalPositionMenuResult;
   vocabulary: BattleVocabulary;
@@ -90,10 +96,19 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
       const response = await this.client.chat(messages);
       this.lastLatencyMs = performance.now() - start;
       this.llmCallCount++;
-      const decision = this.resolveRawDecision(response.raw, summary, positionMenu);
+      const decision = this.resolveRawDecision(response.raw, summary, positionMenu, 'llm');
+      const playerOrderInterpretation = response.raw.playerOrderInterpretation
+        ? this.resolveRawDecision(
+            response.raw.playerOrderInterpretation,
+            summary,
+            positionMenu,
+            'llm_player_order'
+          )
+        : undefined;
 
       return {
         decision,
+        playerOrderInterpretation,
         chatResponse: this.normalizeChatResponse(response.chatResponse, decision),
         positionMenu,
         vocabulary: this.vocabulary,
@@ -125,9 +140,10 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
   }
 
   private resolveRawDecision(
-    raw: LLMRawDecision,
+    raw: LLMRawDecisionPlan,
     summary: HeroSummary,
-    positionMenu: TacticalPositionMenuResult
+    positionMenu: TacticalPositionMenuResult,
+    rationalePrefix: string
   ): HeroDecision {
     const targetId = raw.targetName ? this.vocabulary.resolveNickname(raw.targetName) : undefined;
     const moveToTile = raw.moveOption ? resolveMoveOption(positionMenu, raw.moveOption) : undefined;
@@ -151,7 +167,9 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
       skillId: undefined,
       groupOrders,
       priority: raw.priority,
-      rationaleTag: groupOrders?.length ? 'llm_group_orders' : `llm_${raw.intent}`,
+      rationaleTag: groupOrders?.length
+        ? `${rationalePrefix}_group_orders`
+        : `${rationalePrefix}_${raw.intent}`,
       recheckInSec,
     };
   }
@@ -206,7 +224,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
   }
 
   private mentionsSplitGroups(chatResponse: string): boolean {
-    return /(?:^|[.!?]\s*)warriors\b|(?:^|[.!?]\s*)archers\b|\bwarriors\b.*\barchers\b|\barchers\b.*\bwarriors\b/i.test(
+    return /(?:^|[.!?]\s*)warriors\b|(?:^|[.!?]\s*)(?:archers|ranged)\b|\bwarriors\b.*\b(?:archers|ranged)\b|\b(?:archers|ranged)\b.*\bwarriors\b/i.test(
       chatResponse
     );
   }

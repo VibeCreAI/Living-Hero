@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { UnitState, UnitFaction, UnitRole, UnitAnimState, Position, TileCoord } from '../types';
 import { UNIT_CONFIGS } from '../data/units';
+import { getEnemyVariantDefinition } from '../data/enemyVariants';
 import { EventBus } from '../EventBus';
 
 let unitIdCounter = 0;
@@ -48,13 +49,19 @@ export function createUnitState(
     state: 'idle',
   };
 
-  return {
+  const mergedState: UnitState = {
     ...baseState,
     ...overrides,
     tile: { ...tile, ...(overrides.tile ?? {}) },
     position: { ...position, ...(overrides.position ?? {}) },
     state: 'idle',
   };
+
+  if (!mergedState.displayName && mergedState.variantId) {
+    mergedState.displayName = getEnemyVariantDefinition(mergedState.variantId).displayName;
+  }
+
+  return mergedState;
 }
 
 export class Unit {
@@ -77,11 +84,11 @@ export class Unit {
   constructor(scene: Scene, unitState: UnitState, options: UnitOptions = {}) {
     this.scene = scene;
     this.state = unitState;
-    this.baseScale = unitState.role === 'hero' ? 0.75 : 0.5;
+    this.baseScale = resolveBaseScale(unitState);
     this.hpBarYOffset = unitState.role === 'hero' ? 64 : HP_BAR_Y_OFFSET;
     this.labelYOffset = unitState.role === 'hero' ? 82 : 66;
 
-    const animationPrefix = getAnimationPrefix(unitState.faction, unitState.role);
+    const animationPrefix = getAnimationPrefix(unitState);
     const textureKey = `${animationPrefix}-idle`;
 
     this.sprite = scene.add.sprite(unitState.position.x, unitState.position.y, textureKey);
@@ -303,7 +310,7 @@ export class Unit {
     if (this.state.state === newState) return;
 
     this.state.state = newState;
-    const animationPrefix = getAnimationPrefix(this.state.faction, this.state.role);
+    const animationPrefix = getAnimationPrefix(this.state);
 
     switch (newState) {
       case 'idle':
@@ -412,7 +419,29 @@ export class Unit {
   }
 }
 
-function getAnimationPrefix(faction: UnitFaction, role: UnitRole): string {
+function getAnimationPrefix(
+  unitState: Pick<UnitState, 'faction' | 'role' | 'variantId'>
+): string {
+  if (unitState.variantId) {
+    return getEnemyVariantDefinition(unitState.variantId).animationPrefix;
+  }
+
+  return getFactionRoleAnimationPrefix(unitState.faction, unitState.role);
+}
+
+function getFactionRoleAnimationPrefix(faction: UnitFaction, role: UnitRole): string {
   const factionPrefix = faction === 'allied' ? 'blue' : 'red';
   return `${factionPrefix}-${role}`;
+}
+
+function resolveBaseScale(unitState: Pick<UnitState, 'role' | 'variantId'>): number {
+  if (unitState.role === 'hero') {
+    return 0.75;
+  }
+
+  if (unitState.variantId) {
+    return getEnemyVariantDefinition(unitState.variantId).scale;
+  }
+
+  return 0.5;
 }

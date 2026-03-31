@@ -9,6 +9,7 @@ import {
   PlayerChatMessageEvent,
   BattleGridConfig,
   TileCoord,
+  PortalFloorNumber,
 } from '../types';
 import { Unit, createUnitState } from '../entities/Unit';
 import { Hero, createHeroState } from '../entities/Hero';
@@ -22,10 +23,15 @@ import { OllamaHeroBrain } from '../ai/OllamaHeroBrain';
 import { FeedbackOverlay } from './FeedbackOverlay';
 import { ObstacleSystem, Obstacle } from './Obstacles';
 import { DEFAULT_HEROES } from '../data/heroes';
+import { getEnemyVariantDefinition } from '../data/enemyVariants';
+import { getPortalFloorConfig } from '../data/portalFloors';
+import { UNIT_CONFIGS } from '../data/units';
 import { BattleGrid } from './BattleGrid';
 
 interface BattleConfig {
+  nodeId: string;
   difficulty: number;
+  floorNumber?: PortalFloorNumber;
   mode?: BattleMode;
   layout?: BattleMapLayout;
 }
@@ -75,6 +81,9 @@ const PLAYGROUND_TARGETS: PlaygroundTargetConfig[] = [
 ];
 
 export class BattleLoop {
+  private sessionId = '';
+  private nodeId = '';
+  private floorNumber?: PortalFloorNumber;
   private stateManager: BattleStateManager;
   private movementSystem: MovementSystem;
   private targetingSystem: TargetingSystem;
@@ -133,6 +142,9 @@ export class BattleLoop {
   }
 
   init(scene: Scene, config: BattleConfig): void {
+    this.sessionId = this.createSessionId();
+    this.nodeId = config.nodeId;
+    this.floorNumber = config.floorNumber;
     this.mode = config.mode ?? 'battle';
     this.layout = config.layout ?? {};
     this.feedbackOverlay = new FeedbackOverlay(scene);
@@ -155,8 +167,10 @@ export class BattleLoop {
 
     if (this.mode === 'playground') {
       this.spawnPlaygroundTargets(scene);
+    } else if (config.floorNumber) {
+      this.spawnPortalFloorArmy(scene, config.floorNumber);
     } else {
-      this.spawnEnemyArmy(scene, config.difficulty);
+      this.spawnGenericEnemyArmy(scene, config.difficulty);
     }
 
     this.heroScheduler.setTerrainDescription(this.buildTerrainDescription());
@@ -168,12 +182,15 @@ export class BattleLoop {
     );
 
     this.stateManager.init(
+      this.sessionId,
+      this.nodeId,
       this.alliedUnits.map((unit) => unit.state),
       this.enemyUnits.map((unit) => unit.state),
       this.heroes.map((hero) => hero.state),
       this.obstacleSystem.getObstacles(),
       this.battleGrid.getSummary(),
-      this.mode
+      this.mode,
+      this.floorNumber
     );
     this.stateManager.setPhase(this.mode === 'battle' ? 'init' : 'active');
   }
@@ -289,10 +306,11 @@ export class BattleLoop {
     let spawnIndex = 0;
     for (const composition of alliedComposition) {
       for (let i = 0; i < composition.count; i++) {
+        const currentSpawnIndex = spawnIndex++;
         const fallbackPosition: Position = { x: 100 + Math.random() * 80, y: yOffset + i * 100 };
         const placement =
           this.layout.alliedSpawns && this.layout.alliedSpawns.length > 0
-            ? this.resolveSpawnPosition(this.layout.alliedSpawns, spawnIndex++)
+            ? this.resolveSpawnPosition(this.layout.alliedSpawns, currentSpawnIndex)
             : this.resolveSpawnPlacement(fallbackPosition);
         const state = createUnitState('allied', composition.role, placement.tile, placement.position, {
           assignedHeroId: ownerHeroId,
@@ -303,7 +321,7 @@ export class BattleLoop {
     }
   }
 
-  private spawnEnemyArmy(scene: Scene, difficulty: number): void {
+  private spawnGenericEnemyArmy(scene: Scene, difficulty: number): void {
     const enemyCount = Math.ceil(difficulty);
     const enemyComposition: ArmyComposition[] = [
       { role: 'warrior', count: 2 + enemyCount },
@@ -314,15 +332,53 @@ export class BattleLoop {
     let spawnIndex = 0;
     for (const composition of enemyComposition) {
       for (let i = 0; i < composition.count; i++) {
+        const currentSpawnIndex = spawnIndex++;
         const fallbackPosition: Position = { x: 800 + Math.random() * 80, y: yOffset + i * 90 };
         const placement =
           this.layout.enemySpawns && this.layout.enemySpawns.length > 0
-            ? this.resolveSpawnPosition(this.layout.enemySpawns, spawnIndex++)
+            ? this.resolveSpawnPosition(this.layout.enemySpawns, currentSpawnIndex)
             : this.resolveSpawnPlacement(fallbackPosition);
         const state = createUnitState('enemy', composition.role, placement.tile, placement.position);
         this.enemyUnits.push(new Unit(scene, state));
       }
       yOffset += composition.count * 90 + 20;
+    }
+  }
+
+  private spawnPortalFloorArmy(scene: Scene, floorNumber: PortalFloorNumber): void {
+    const floorConfig = getPortalFloorConfig(floorNumber);
+    const nameCounts = new Map<string, number>();
+    let spawnIndex = 0;
+
+    for (const group of floorConfig.enemies) {
+      const variant = getEnemyVariantDefinition(group.variantId);
+
+      for (let i = 0; i < group.count; i++) {
+        const currentSpawnIndex = spawnIndex++;
+        const fallbackPosition: Position = { x: 800 + Math.random() * 80, y: 200 + currentSpawnIndex * 54 };
+        const placement =
+          this.layout.enemySpawns && this.layout.enemySpawns.length > 0
+            ? this.resolveSpawnPosition(this.layout.enemySpawns, currentSpawnIndex)
+            : this.resolveSpawnPlacement(fallbackPosition);
+        const nextNameIndex = (nameCounts.get(variant.displayName) ?? 0) + 1;
+        nameCounts.set(variant.displayName, nextNameIndex);
+        const scaledHp = Math.max(
+          1,
+          Math.round(UNIT_CONFIGS[variant.role].hp * floorConfig.statMultiplier)
+        );
+        const scaledAttack = Math.max(
+          1,
+          Math.round(UNIT_CONFIGS[variant.role].attack * floorConfig.statMultiplier)
+        );
+        const state = createUnitState('enemy', variant.role, placement.tile, placement.position, {
+          variantId: group.variantId,
+          displayName: `${variant.displayName} ${nextNameIndex}`,
+          hp: scaledHp,
+          maxHp: scaledHp,
+          attack: scaledAttack,
+        });
+        this.enemyUnits.push(new Unit(scene, state));
+      }
     }
   }
 
@@ -351,7 +407,12 @@ export class BattleLoop {
 
   private buildTerrainDescription(): string {
     if (this.mode !== 'playground') {
-      return this.obstacleSystem.describe();
+      if (!this.floorNumber) {
+        return this.obstacleSystem.describe();
+      }
+
+      return `${this.obstacleSystem.describe()}
+  Portal floor ${this.floorNumber} is active. Expect stronger enemies on higher floors.`;
     }
 
     const targets = this.enemyUnits
@@ -412,6 +473,9 @@ ${targets}`;
     this.mode = 'battle';
     this.planningRequested = false;
     this.layout = {};
+    this.nodeId = '';
+    this.floorNumber = undefined;
+    this.sessionId = '';
   }
 
   private syncVisuals(): void {
@@ -489,5 +553,9 @@ ${targets}`;
       col: base.col * cycle,
       row: base.row * cycle,
     };
+  }
+
+  private createSessionId(): string {
+    return `battle-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   }
 }

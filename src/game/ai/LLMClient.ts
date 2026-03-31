@@ -14,9 +14,7 @@ export interface LLMGroupOrder {
   moveOption?: string;
 }
 
-/** Raw decision as the LLM produces it — needs resolution before becoming a HeroDecision */
-export interface LLMRawDecision {
-  chatResponse: string;
+export interface LLMRawDecisionPlan {
   intent: IntentType;
   targetName?: string;
   moveOption?: string;
@@ -24,59 +22,78 @@ export interface LLMRawDecision {
   groupOrders?: LLMGroupOrder[];
 }
 
+/** Raw decision as the LLM produces it — needs resolution before becoming a HeroDecision */
+export interface LLMRawDecision extends LLMRawDecisionPlan {
+  chatResponse: string;
+  playerOrderInterpretation?: LLMRawDecisionPlan;
+}
+
 export interface LLMResponse {
   chatResponse: string;
   raw: LLMRawDecision;
 }
+
+const GROUP_ORDER_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      group: {
+        type: 'string',
+        enum: ['all', 'hero', 'warriors', 'archers'],
+      },
+      intent: {
+        type: 'string',
+        enum: [
+          'hold_position',
+          'advance_to_point',
+          'protect_target',
+          'focus_enemy',
+          'retreat_to_point',
+          'use_skill',
+        ],
+      },
+      targetName: { type: 'string' },
+      moveOption: { type: 'string' },
+    },
+    required: ['group', 'intent'],
+  },
+};
+
+const DECISION_PLAN_PROPERTIES = {
+  intent: {
+    type: 'string',
+    enum: [
+      'hold_position',
+      'advance_to_point',
+      'protect_target',
+      'focus_enemy',
+      'retreat_to_point',
+      'use_skill',
+    ],
+  },
+  targetName: { type: 'string' },
+  moveOption: { type: 'string' },
+  priority: {
+    type: 'string',
+    enum: ['low', 'medium', 'high'],
+  },
+  groupOrders: GROUP_ORDER_SCHEMA,
+};
+
+const OPTIONAL_PLAYER_ORDER_SCHEMA = {
+  type: 'object',
+  properties: DECISION_PLAN_PROPERTIES,
+  required: ['intent'],
+};
 
 /** JSON schema sent to Ollama structured outputs to guarantee valid response */
 const DECISION_SCHEMA = {
   type: 'object',
   properties: {
     chatResponse: { type: 'string' },
-    intent: {
-      type: 'string',
-      enum: [
-        'hold_position',
-        'advance_to_point',
-        'protect_target',
-        'focus_enemy',
-        'retreat_to_point',
-        'use_skill',
-      ],
-    },
-    targetName: { type: 'string' },
-    moveOption: { type: 'string' },
-    priority: {
-      type: 'string',
-      enum: ['low', 'medium', 'high'],
-    },
-    groupOrders: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          group: {
-            type: 'string',
-            enum: ['all', 'hero', 'warriors', 'archers'],
-          },
-          intent: {
-            type: 'string',
-            enum: [
-              'hold_position',
-              'advance_to_point',
-              'protect_target',
-              'focus_enemy',
-              'retreat_to_point',
-              'use_skill',
-            ],
-          },
-          targetName: { type: 'string' },
-          moveOption: { type: 'string' },
-        },
-        required: ['group', 'intent'],
-      },
-    },
+    ...DECISION_PLAN_PROPERTIES,
+    playerOrderInterpretation: OPTIONAL_PLAYER_ORDER_SCHEMA,
   },
   required: ['chatResponse', 'intent'],
 };
@@ -156,13 +173,45 @@ export class LLMClient {
 
   private parseResponse(content: string): LLMResponse {
     const raw = JSON.parse(content);
+    const decision: LLMRawDecision = {
+      chatResponse: raw.chatResponse ?? '',
+      ...this.parseRequiredDecisionPlan(raw),
+      playerOrderInterpretation: this.parseOptionalDecisionPlan(raw.playerOrderInterpretation),
+    };
 
-    const intent: IntentType = VALID_INTENTS.includes(raw.intent)
-      ? raw.intent
-      : 'hold_position';
+    return {
+      chatResponse: decision.chatResponse,
+      raw: decision,
+    };
+  }
 
-    const groupOrders: LLMGroupOrder[] | undefined = Array.isArray(raw.groupOrders)
-      ? raw.groupOrders
+  private parseRequiredDecisionPlan(raw: any): LLMRawDecisionPlan {
+    return {
+      intent: VALID_INTENTS.includes(raw.intent) ? raw.intent : 'hold_position',
+      targetName: typeof raw.targetName === 'string' ? raw.targetName : undefined,
+      moveOption: typeof raw.moveOption === 'string' ? raw.moveOption : undefined,
+      priority: ['low', 'medium', 'high'].includes(raw.priority) ? raw.priority : 'medium',
+      groupOrders: this.parseGroupOrders(raw.groupOrders),
+    };
+  }
+
+  private parseOptionalDecisionPlan(raw: any): LLMRawDecisionPlan | undefined {
+    if (!raw || typeof raw !== 'object' || !VALID_INTENTS.includes(raw.intent)) {
+      return undefined;
+    }
+
+    return {
+      intent: raw.intent,
+      targetName: typeof raw.targetName === 'string' ? raw.targetName : undefined,
+      moveOption: typeof raw.moveOption === 'string' ? raw.moveOption : undefined,
+      priority: ['low', 'medium', 'high'].includes(raw.priority) ? raw.priority : 'medium',
+      groupOrders: this.parseGroupOrders(raw.groupOrders),
+    };
+  }
+
+  private parseGroupOrders(rawGroupOrders: any): LLMGroupOrder[] | undefined {
+    const groupOrders: LLMGroupOrder[] | undefined = Array.isArray(rawGroupOrders)
+      ? rawGroupOrders
           .map((go: any): LLMGroupOrder | null => {
             const group = VALID_GROUPS.includes(go?.group) ? go.group : null;
             const goIntent = VALID_INTENTS.includes(go?.intent) ? go.intent : null;
@@ -177,18 +226,6 @@ export class LLMClient {
           .filter((go: LLMGroupOrder | null): go is LLMGroupOrder => go !== null)
       : undefined;
 
-    const decision: LLMRawDecision = {
-      chatResponse: raw.chatResponse ?? '',
-      intent,
-      targetName: typeof raw.targetName === 'string' ? raw.targetName : undefined,
-      moveOption: typeof raw.moveOption === 'string' ? raw.moveOption : undefined,
-      priority: ['low', 'medium', 'high'].includes(raw.priority) ? raw.priority : 'medium',
-      groupOrders: groupOrders && groupOrders.length > 0 ? groupOrders : undefined,
-    };
-
-    return {
-      chatResponse: decision.chatResponse,
-      raw: decision,
-    };
+    return groupOrders && groupOrders.length > 0 ? groupOrders : undefined;
   }
 }

@@ -9,17 +9,21 @@ import {
   Position,
   UnitRole,
   PlayerChatMessageEvent,
+  PortalFloorNumber,
 } from '../types';
 import {
   createGroundTilemapLayer,
   getObjectLayerObjects,
   getStringProperty,
 } from '../maps/tiled';
+import { getNextPortalFloor, getPortalFloorConfig } from '../data/portalFloors';
+import { unlockPortalFloor } from '../state/PortalProgression';
 import { addRibbonLabel } from '../ui/RibbonLabel';
 
 interface BattleSceneData {
   nodeId: string;
   difficulty: number;
+  floorNumber?: PortalFloorNumber;
   mode?: BattleMode;
 }
 
@@ -32,6 +36,8 @@ export class BattleScene extends Scene {
   private battleStartHandler?: () => void;
   private playgroundExitHandler?: () => void;
   private returnToOverworldHandler?: () => void;
+  private replayBattleHandler?: () => void;
+  private advanceFloorHandler?: () => void;
 
   constructor() {
     super('BattleScene');
@@ -45,11 +51,17 @@ export class BattleScene extends Scene {
   create(): void {
     const isPlayground = this.sceneData.mode === 'playground';
     const mapLayout = this.createMapLayout(isPlayground ? 'playground' : 'battle');
+    const battleLabel =
+      isPlayground
+        ? 'PLAYGROUND'
+        : this.sceneData.floorNumber
+          ? `FLOOR ${this.sceneData.floorNumber}`
+          : 'BATTLE';
 
     addRibbonLabel(this, {
       x: 512,
       y: 32,
-      text: isPlayground ? 'PLAYGROUND' : 'BATTLE',
+      text: battleLabel,
       tone: 'gold',
       depth: 11,
       ribbonScale: 0.9,
@@ -78,7 +90,9 @@ export class BattleScene extends Scene {
 
     this.battleLoop = new BattleLoop();
     this.battleLoop.init(this, {
+      nodeId: this.sceneData.nodeId,
       difficulty: this.sceneData.difficulty,
+      floorNumber: this.sceneData.floorNumber,
       mode: this.sceneData.mode,
       layout: mapLayout,
     });
@@ -112,6 +126,20 @@ export class BattleScene extends Scene {
     };
     EventBus.on('return-to-overworld', this.returnToOverworldHandler);
 
+    this.replayBattleHandler = () => {
+      if (this.sceneData.mode === 'battle') {
+        this.replayBattle();
+      }
+    };
+    EventBus.on('replay-battle', this.replayBattleHandler);
+
+    this.advanceFloorHandler = () => {
+      if (this.sceneData.mode === 'battle') {
+        this.advanceToNextFloor();
+      }
+    };
+    EventBus.on('advance-to-next-floor', this.advanceFloorHandler);
+
     EventBus.emit('current-scene-ready', this);
     EventBus.emit('battle-state-update', this.battleLoop.getState());
   }
@@ -137,8 +165,19 @@ export class BattleScene extends Scene {
 
     this.battleResult = result;
     const state = this.battleLoop.getState();
+    const nextFloor = this.sceneData.floorNumber
+      ? getNextPortalFloor(this.sceneData.floorNumber)
+      : null;
+    if (result === 'allied_win' && this.sceneData.floorNumber) {
+      unlockPortalFloor(this.sceneData.floorNumber);
+    }
     const summaryData: BattleSummaryData = {
       result,
+      nodeId: state.nodeId,
+      floorNumber: state.floorNumber,
+      maxFloor: state.maxFloor,
+      canAdvance: result === 'allied_win' && nextFloor !== null,
+      nextFloor,
       durationSec: state.timeSec,
       alliedUnits: state.alliedUnits,
       enemyUnits: state.enemyUnits,
@@ -167,12 +206,43 @@ export class BattleScene extends Scene {
       EventBus.removeListener('return-to-overworld', this.returnToOverworldHandler);
       this.returnToOverworldHandler = undefined;
     }
+    if (this.replayBattleHandler) {
+      EventBus.removeListener('replay-battle', this.replayBattleHandler);
+      this.replayBattleHandler = undefined;
+    }
+    if (this.advanceFloorHandler) {
+      EventBus.removeListener('advance-to-next-floor', this.advanceFloorHandler);
+      this.advanceFloorHandler = undefined;
+    }
     this.battleLoop.destroy();
   }
 
   private returnToOverworld(): void {
     this.cleanUp();
     this.scene.start('OverworldScene');
+  }
+
+  private replayBattle(): void {
+    this.cleanUp();
+    this.scene.restart(this.sceneData);
+  }
+
+  private advanceToNextFloor(): void {
+    if (!this.sceneData.floorNumber) {
+      return;
+    }
+
+    const nextFloor = getNextPortalFloor(this.sceneData.floorNumber);
+    if (!nextFloor) {
+      return;
+    }
+
+    this.cleanUp();
+    this.scene.restart({
+      ...this.sceneData,
+      floorNumber: nextFloor,
+      difficulty: getPortalFloorConfig(nextFloor).statMultiplier,
+    });
   }
 
   private createMapLayout(mode: BattleMode): BattleMapLayout {

@@ -8,6 +8,7 @@ import {
   DamageEvent,
   BattleObstacle,
   BattleGridSummary,
+  PortalFloorNumber,
 } from '../types';
 
 const RECENT_DAMAGE_WINDOW_SEC = 4;
@@ -17,7 +18,10 @@ export class BattleStateManager {
 
   constructor() {
     this.state = {
+      sessionId: '',
+      nodeId: '',
       mode: 'battle',
+      maxFloor: 3,
       grid: {
         cols: 1,
         rows: 1,
@@ -39,15 +43,22 @@ export class BattleStateManager {
   }
 
   init(
+    sessionId: string,
+    nodeId: string,
     alliedUnits: UnitState[],
     enemyUnits: UnitState[],
     heroes: HeroState[],
     obstacles: BattleObstacle[],
     grid: BattleGridSummary,
-    mode: BattleMode = 'battle'
+    mode: BattleMode = 'battle',
+    floorNumber?: PortalFloorNumber
   ): void {
     this.state = {
+      sessionId,
+      nodeId,
       mode,
+      floorNumber,
+      maxFloor: 3,
       grid,
       timeSec: 0,
       phase: 'init',

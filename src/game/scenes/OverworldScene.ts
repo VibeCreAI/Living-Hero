@@ -1,13 +1,15 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { OVERWORLD_NODES as OVERWORLD_NODE_FALLBACK } from '../data/terrain';
-import { BattleMode, OverworldNode } from '../types';
+import { BattleMode, OverworldNode, PortalFloorNumber, PortalProgressState } from '../types';
+import { getPortalFloorConfig, MAX_PORTAL_FLOOR, PORTAL_NODE_ID } from '../data/portalFloors';
 import {
   createGroundTilemapLayer,
   getNumberProperty,
   getObjectLayerObjects,
   getStringProperty,
 } from '../maps/tiled';
+import { loadPortalProgress } from '../state/PortalProgression';
 import { addRibbonLabel } from '../ui/RibbonLabel';
 
 interface TerrainDecorPlacement {
@@ -35,11 +37,15 @@ export class OverworldScene extends Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private promptText!: Phaser.GameObjects.Text;
   private nearNode: OverworldNode | null = null;
-  private nodeSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private nodeSprites: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite> = new Map();
   private overworldNodes: OverworldNode[] = [];
   private heroPos = { x: 120, y: 400 };
   private readonly HERO_SPEED = 200;
   private spaceKey!: Phaser.Input.Keyboard.Key;
+  private portalPickerOpen = false;
+  private portalProgress: PortalProgressState = loadPortalProgress();
+  private portalFloorStartHandler?: (payload: { floorNumber: PortalFloorNumber }) => void;
+  private portalPickerCloseHandler?: () => void;
 
   constructor() {
     super('OverworldScene');
@@ -47,6 +53,7 @@ export class OverworldScene extends Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor('#365f3d');
+    this.portalProgress = loadPortalProgress();
     this.loadMapData();
     this.spawnDecorations(OVERWORLD_CLOUDS);
 
@@ -61,16 +68,26 @@ export class OverworldScene extends Scene {
     });
 
     for (const node of this.overworldNodes) {
-      const castle = this.add.image(
-        node.position.x,
-        node.position.y,
-        node.mode === 'playground' ? 'castle-blue' : 'castle-red'
-      );
-      castle.setScale(0.4);
-      this.nodeSprites.set(node.id, castle);
+      const labelOffsetY = node.kind === 'portal' ? 86 : 50;
+      const detailOffsetY = node.kind === 'portal' ? 104 : 66;
+      if (node.kind === 'portal') {
+        const nodeSprite = this.add.sprite(node.position.x, node.position.y, 'portal-main');
+        nodeSprite.setScale(1.05);
+        nodeSprite.setDepth(5);
+        nodeSprite.play('portal-main-anim');
+        this.nodeSprites.set(node.id, nodeSprite);
+      } else {
+        const nodeSprite = this.add.image(
+          node.position.x,
+          node.position.y,
+          node.mode === 'playground' ? 'castle-blue' : 'castle-red'
+        );
+        nodeSprite.setScale(0.4);
+        this.nodeSprites.set(node.id, nodeSprite);
+      }
 
       this.add
-        .text(node.position.x, node.position.y + 50, node.label, {
+        .text(node.position.x, node.position.y + labelOffsetY, node.label, {
           fontSize: '12px',
           color: '#ffffff',
           fontFamily: '"NeoDunggeunmoPro", monospace',
@@ -80,9 +97,13 @@ export class OverworldScene extends Scene {
         .setOrigin(0.5);
 
       const difficultyText =
-        node.mode === 'playground' ? 'Sandbox' : '\u2605'.repeat(Math.ceil(node.difficulty));
+        node.kind === 'portal'
+          ? `Floors 1-${MAX_PORTAL_FLOOR}`
+          : node.mode === 'playground'
+            ? 'Sandbox'
+            : '\u2605'.repeat(Math.ceil(node.difficulty));
       this.add
-        .text(node.position.x, node.position.y + 66, difficultyText, {
+        .text(node.position.x, node.position.y + detailOffsetY, difficultyText, {
           fontSize: '12px',
           color: node.mode === 'playground' ? '#66ccff' : '#ffcc00',
           fontFamily: '"NeoDunggeunmoPro", monospace',
@@ -122,6 +143,7 @@ export class OverworldScene extends Scene {
 
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.bindPortalEvents();
 
     EventBus.emit('current-scene-ready', this);
   }
@@ -131,10 +153,12 @@ export class OverworldScene extends Scene {
     let dx = 0;
     let dy = 0;
 
-    if (this.cursors.left.isDown) dx -= 1;
-    if (this.cursors.right.isDown) dx += 1;
-    if (this.cursors.up.isDown) dy -= 1;
-    if (this.cursors.down.isDown) dy += 1;
+    if (!this.portalPickerOpen) {
+      if (this.cursors.left.isDown) dx -= 1;
+      if (this.cursors.right.isDown) dx += 1;
+      if (this.cursors.up.isDown) dy -= 1;
+      if (this.cursors.down.isDown) dy += 1;
+    }
 
     if (dx !== 0 && dy !== 0) {
       const inv = 1 / Math.SQRT2;
@@ -162,24 +186,38 @@ export class OverworldScene extends Scene {
       const dx2 = this.heroPos.x - node.position.x;
       const dy2 = this.heroPos.y - node.position.y;
       const dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      const interactionRadius = node.kind === 'portal' ? 88 : 70;
 
-      if (dist < 70) {
+      if (dist < interactionRadius) {
         this.nearNode = node;
         break;
       }
     }
 
     if (this.nearNode) {
-      const verb = this.nearNode.mode === 'playground' ? 'enter playground' : 'enter battle';
-      this.promptText.setText(`Press SPACE to ${verb}: ${this.nearNode.label}`);
-      this.promptText.setVisible(true);
+      if (this.portalPickerOpen && this.nearNode.kind === 'portal') {
+        this.promptText.setVisible(false);
+      } else {
+        const verb =
+          this.nearNode.kind === 'portal'
+            ? 'enter portal'
+            : this.nearNode.mode === 'playground'
+              ? 'enter playground'
+              : 'enter battle';
+        this.promptText.setText(`Press SPACE to ${verb}: ${this.nearNode.label}`);
+        this.promptText.setVisible(true);
+      }
 
-      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-        this.scene.start('BattleScene', {
-          nodeId: this.nearNode.id,
-          difficulty: this.nearNode.difficulty,
-          mode: this.nearNode.mode ?? 'battle',
-        });
+      if (!this.portalPickerOpen && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+        if (this.nearNode.kind === 'portal') {
+          this.portalPickerOpen = true;
+        } else {
+          this.scene.start('BattleScene', {
+            nodeId: this.nearNode.id,
+            difficulty: this.nearNode.difficulty,
+            mode: this.nearNode.mode ?? 'battle',
+          });
+        }
       }
     } else {
       this.promptText.setVisible(false);
@@ -188,6 +226,10 @@ export class OverworldScene extends Scene {
     EventBus.emit('overworld-update', {
       heroPosition: { ...this.heroPos },
       nearNode: this.nearNode?.label ?? null,
+      nearNodeKind: this.nearNode?.kind ?? null,
+      portalPickerOpen: this.portalPickerOpen,
+      highestUnlockedFloor: this.portalProgress.highestUnlockedFloor,
+      highestClearedFloor: this.portalProgress.highestClearedFloor,
     });
   }
 
@@ -214,11 +256,13 @@ export class OverworldScene extends Scene {
       const label = getStringProperty(object, 'label') ?? object.name ?? `Node ${index + 1}`;
       const difficulty = getNumberProperty(object, 'difficulty') ?? 1;
       const mode = this.parseBattleMode(getStringProperty(object, 'mode'));
+      const kind = this.parseNodeKind(getStringProperty(object, 'kind'));
 
       nodes.push({
         id,
         position: { x: object.x, y: object.y },
         label,
+        kind,
         difficulty,
         completed: false,
         mode,
@@ -236,6 +280,10 @@ export class OverworldScene extends Scene {
     return undefined;
   }
 
+  private parseNodeKind(value: string | undefined): OverworldNode['kind'] {
+    return value === 'portal' ? 'portal' : 'node';
+  }
+
   private objectTypeIs(object: Phaser.Types.Tilemaps.TiledObject, expected: string): boolean {
     const type = typeof object.type === 'string' ? object.type.trim().toLowerCase() : '';
     const name = typeof object.name === 'string' ? object.name.trim().toLowerCase() : '';
@@ -250,5 +298,42 @@ export class OverworldScene extends Scene {
       sprite.setScale(placement.scale);
       sprite.setAlpha(placement.alpha ?? 0.82);
     }
+  }
+
+  private bindPortalEvents(): void {
+    this.portalFloorStartHandler = (payload) => {
+      if (!this.portalPickerOpen) {
+        return;
+      }
+      if (payload.floorNumber > this.portalProgress.highestUnlockedFloor) {
+        return;
+      }
+
+      const floorConfig = getPortalFloorConfig(payload.floorNumber);
+      this.portalPickerOpen = false;
+      this.scene.start('BattleScene', {
+        nodeId: PORTAL_NODE_ID,
+        difficulty: floorConfig.statMultiplier,
+        floorNumber: payload.floorNumber,
+        mode: 'battle',
+      });
+    };
+    EventBus.on('portal-floor-start-requested', this.portalFloorStartHandler);
+
+    this.portalPickerCloseHandler = () => {
+      this.portalPickerOpen = false;
+    };
+    EventBus.on('portal-picker-close-requested', this.portalPickerCloseHandler);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.portalFloorStartHandler) {
+        EventBus.removeListener('portal-floor-start-requested', this.portalFloorStartHandler);
+        this.portalFloorStartHandler = undefined;
+      }
+      if (this.portalPickerCloseHandler) {
+        EventBus.removeListener('portal-picker-close-requested', this.portalPickerCloseHandler);
+        this.portalPickerCloseHandler = undefined;
+      }
+    });
   }
 }

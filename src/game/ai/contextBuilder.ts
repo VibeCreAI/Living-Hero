@@ -60,6 +60,7 @@ ${formatPositionMenuForPrompt(positionMenu)}`;
   if (playerMessage) {
     prompt += `\n\nPLAYER SAYS: "${playerMessage}"`;
     if (parsedDirective) {
+      prompt += '\nRULE PARSER: structured directive detected.';
       prompt += `\nHINT: ${formatDirectiveHint(parsedDirective, positionMenu)}`;
       if (parsedDirective.groupOrders?.length) {
         prompt += '\nSPLIT ORDERS - you MUST use groupOrders in your response:';
@@ -76,12 +77,18 @@ ${formatPositionMenuForPrompt(positionMenu)}`;
         }
         prompt += '\nFollow this assignment. Each group gets its own order in groupOrders.';
       }
+      prompt += '\nLeave playerOrderInterpretation empty unless the player order contains extra executable detail not captured by the hint.';
+    } else {
+      prompt += '\nRULE PARSER: no structured directive detected.';
+      prompt += '\nIf the player order is still clear and executable, translate it into playerOrderInterpretation.';
+      prompt += '\nIf the wording is too vague or not actionable, leave playerOrderInterpretation empty and make your own tactical decision.';
     }
   } else {
     prompt += `\n\n${buildSituationalNudge(summary, vocabulary, positionMenu)}`;
   }
 
-  prompt += '\n\nGROUP ORDER RULE: If warriors, archers, and hero should do different things, include groupOrders. If groupOrders is empty, chatResponse must describe one army-wide plan only.';
+  prompt += '\n\nGROUP ORDER RULE: If warriors, ranged units, and hero should do different things, include groupOrders. Use the archers group for ranged units in JSON. If groupOrders is empty, chatResponse must describe one army-wide plan only.';
+  prompt += '\nPLAYER ORDER FALLBACK RULE: chatResponse must describe the top-level tactical decision only. Use playerOrderInterpretation only as an optional structured translation of PLAYER SAYS.';
 
   return prompt;
 }
