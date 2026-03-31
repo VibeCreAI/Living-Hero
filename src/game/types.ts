@@ -59,6 +59,15 @@ export type PortalClearedFloor = 0 | PortalFloorNumber;
 export type UnitAnimState = 'idle' | 'moving' | 'attacking' | 'dead';
 export type UnitOrderMode = 'advance' | 'focus' | 'hold' | 'protect' | 'retreat';
 export type UnitGroup = 'all' | 'hero' | 'warriors' | 'archers';
+export type ChainTriggerType = 'enemy_in_range' | 'combat_started';
+export type ChainControl = 'keep' | 'break';
+export type HeroOpeningStrategyStatus =
+  | 'idle'
+  | 'planning'
+  | 'ready'
+  | 'active'
+  | 'broken'
+  | 'error';
 
 export interface UnitConfig {
   role: UnitRole;
@@ -144,6 +153,7 @@ export interface HeroState {
   position: Position;
   currentDirective?: string;
   currentDecision?: HeroDecision;
+  openingStrategy?: HeroOpeningStrategyState;
   traits: HeroTraits;
 }
 
@@ -183,6 +193,25 @@ export interface HeroDecision {
   recheckInSec: number;
 }
 
+export interface ReservedChainStep extends HeroDecision {
+  trigger: ChainTriggerType;
+  chatResponse: string;
+  summary: string;
+}
+
+export interface HeroOpeningStrategyState {
+  status: HeroOpeningStrategyStatus;
+  promptText: string;
+  planSummary: string;
+  openingChatResponse: string;
+  openingDecision?: HeroDecision;
+  reservedSteps: ReservedChainStep[];
+  activeStepIndex: number;
+  nextTrigger?: ChainTriggerType;
+  breakable: boolean;
+  errorMessage?: string;
+}
+
 export interface DamageEvent {
   timeSec: number;
   attackerId: string;
@@ -219,7 +248,7 @@ export interface HeroSummary {
 
 // Battle types
 export type BattleMode = 'battle' | 'playground';
-export type BattlePhase = 'init' | 'starting' | 'active' | 'ended';
+export type BattlePhase = 'init' | 'planning' | 'ready' | 'active' | 'ended';
 
 export interface BattleState {
   sessionId: string;
@@ -261,6 +290,15 @@ export interface BattleSummaryData {
 
 export interface PlayerChatMessageEvent {
   text: string;
+  targetHeroIds: string[];
+}
+
+export interface BattlePlanRequestEvent {
+  text: string;
+  targetHeroIds: string[];
+}
+
+export interface BattlePlanApprovalEvent {
   targetHeroIds: string[];
 }
 

@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EventBus } from '../../../../game/EventBus';
-import { BattleState, BattleSummaryData, HeroDecision, HeroState, HeroChatEvent, UnitGroup } from '../../../../game/types';
+import {
+  BattlePlanApprovalEvent,
+  BattlePlanRequestEvent,
+  BattleState,
+  BattleSummaryData,
+  HeroDecision,
+  HeroState,
+  HeroChatEvent,
+  ReservedChainStep,
+  UnitGroup,
+} from '../../../../game/types';
 import { CommunicationLog, CommunicationMessage } from './ChatPanel';
 import { BattleSummary } from './BattleSummary';
 import { LLMStatus } from './LLMStatus';
@@ -15,31 +25,39 @@ export function BattleHUD() {
   const [messages, setMessages] = useState<CommunicationMessage[]>([]);
   const [summaryData, setSummaryData] = useState<BattleSummaryData | null>(null);
   const [planningOverlayVisible, setPlanningOverlayVisible] = useState(false);
-  const [battleStartPending, setBattleStartPending] = useState(false);
+  const [plannerPrompt, setPlannerPrompt] = useState('');
   const messageIdRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const stateHandler = (state: BattleState) => {
-      if (sessionIdRef.current !== state.sessionId) {
-        sessionIdRef.current = state.sessionId;
+      const stateSnapshot = structuredClone(state);
+
+      if (sessionIdRef.current !== stateSnapshot.sessionId) {
+        sessionIdRef.current = stateSnapshot.sessionId;
         setMessages([]);
         setSummaryData(null);
-        setBattleStartPending(false);
-        setPlanningOverlayVisible(state.mode === 'battle' && state.phase === 'init');
+        setPlanningOverlayVisible(stateSnapshot.mode === 'battle');
+        setPlannerPrompt('');
         messageIdRef.current = 0;
       }
 
-      const waitingForStrategy = state.mode === 'battle' && state.phase === 'starting';
-      const inPlanner = state.mode === 'battle' && state.phase === 'init';
-      setBattleStartPending(waitingForStrategy);
-      setPlanningOverlayVisible(inPlanner);
-      setBattleState(state);
+      const inPlannerFlow =
+        stateSnapshot.mode === 'battle' &&
+        (stateSnapshot.phase === 'init' ||
+          stateSnapshot.phase === 'planning' ||
+          stateSnapshot.phase === 'ready');
+      if (stateSnapshot.phase === 'planning' || stateSnapshot.phase === 'ready') {
+        setPlanningOverlayVisible(true);
+      } else if (!inPlannerFlow) {
+        setPlanningOverlayVisible(false);
+      }
+      setBattleState(stateSnapshot);
       setActiveHeroId((current) => {
-        if (current && state.heroes.some((hero) => hero.id === current)) {
+        if (current && stateSnapshot.heroes.some((hero) => hero.id === current)) {
           return current;
         }
-        return state.heroes[0]?.id ?? null;
+        return stateSnapshot.heroes[0]?.id ?? null;
       });
     };
 
@@ -115,8 +133,10 @@ export function BattleHUD() {
   const enemyAlive = battleState?.enemyUnits.filter((u) => u.state !== 'dead').length ?? 0;
   const timeSec = battleState?.timeSec ?? 0;
   const isPlayground = battleState?.mode === 'playground';
-  const isPlanning = battleState?.mode === 'battle' && battleState.phase === 'init';
-  const isStrategyLoading = battleState?.mode === 'battle' && battleState.phase === 'starting';
+  const isPlannerIdle = battleState?.mode === 'battle' && battleState.phase === 'init';
+  const isPlanGenerating = battleState?.mode === 'battle' && battleState.phase === 'planning';
+  const isPlanReady = battleState?.mode === 'battle' && battleState.phase === 'ready';
+  const isPreBattleFlow = isPlannerIdle || isPlanGenerating || isPlanReady;
   const battleTitle =
     isPlayground
       ? 'PLAYGROUND'
@@ -131,30 +151,55 @@ export function BattleHUD() {
   const warriorPlan = formatGroupPlan(currentDecision, 'warriors');
   const archerPlan = formatGroupPlan(currentDecision, 'archers');
   const hasSplitPlan = Boolean(currentDecision?.groupOrders?.length);
+  const openingStrategy = activeHero?.openingStrategy;
 
   useEffect(() => {
-    if (isPlanning) {
-      setPlanningOverlayVisible(true);
-      setBattleStartPending(false);
-      return;
+    if (
+      openingStrategy &&
+      (openingStrategy.status === 'planning' ||
+        openingStrategy.status === 'ready' ||
+        openingStrategy.status === 'error')
+    ) {
+      setPlannerPrompt(openingStrategy.promptText);
     }
-
-    if (isStrategyLoading) {
-      setPlanningOverlayVisible(false);
-      return;
-    }
-
-    setBattleStartPending(false);
-  }, [isPlanning, isStrategyLoading]);
+  }, [openingStrategy]);
 
   const leavePlayground = () => {
     EventBus.emit('playground-exit-requested');
   };
 
-  const startBattle = () => {
-    setBattleStartPending(true);
-    setPlanningOverlayVisible(false);
-    EventBus.emit('battle-start-requested');
+  const generatePlan = () => {
+    if (!activeHero?.id) {
+      return;
+    }
+
+    const event: BattlePlanRequestEvent = {
+      text: plannerPrompt.trim(),
+      targetHeroIds: [activeHero.id],
+    };
+    EventBus.emit('battle-plan-requested', event);
+  };
+
+  const revisePlan = () => {
+    if (!activeHero?.id) {
+      return;
+    }
+
+    const event: BattlePlanApprovalEvent = {
+      targetHeroIds: [activeHero.id],
+    };
+    EventBus.emit('battle-plan-revise-requested', event);
+  };
+
+  const approvePlan = () => {
+    if (!activeHero?.id) {
+      return;
+    }
+
+    const event: BattlePlanApprovalEvent = {
+      targetHeroIds: [activeHero.id],
+    };
+    EventBus.emit('battle-plan-approved', event);
   };
 
   const handleSend = (payload: PlayerChatSendPayload) => {
@@ -291,6 +336,39 @@ export function BattleHUD() {
           <span>{currentDirective ? `"${currentDirective}"` : 'none'}</span>
         </div>
 
+        {openingStrategy?.status === 'active' && (
+          <div
+            style={{
+              padding: '6px 8px',
+              border: '1px solid #3b3b3b',
+              borderRadius: '6px',
+              backgroundColor: '#141914',
+            }}
+          >
+            <div style={{ color: '#8fc7ff', marginBottom: '4px', fontSize: '13px' }}>
+              Opening Chain
+            </div>
+            <PlanRow
+              label="Status"
+              value={openingStrategy.breakable ? 'breakable' : 'armed'}
+              color="#8fc7ff"
+            />
+            <PlanRow
+              label="Step"
+              value={formatOpeningStepLabel(openingStrategy.activeStepIndex)}
+              color="#c8f08a"
+            />
+            <PlanRow
+              label="Next"
+              value={openingStrategy.nextTrigger ? formatTriggerLabel(openingStrategy.nextTrigger) : 'none'}
+              color="#f0c871"
+            />
+            <div style={{ marginTop: '6px', color: '#cdbd97', fontSize: '12px', lineHeight: 1.4 }}>
+              {openingStrategy.planSummary}
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             padding: '6px 8px',
@@ -340,15 +418,15 @@ export function BattleHUD() {
           activeHeroId={activeHero?.id ?? null}
           onActiveHeroChange={setActiveHeroId}
           onSend={handleSend}
-          disabled={isPlanning || isStrategyLoading}
+          disabled={Boolean(isPreBattleFlow)}
           disabledNote="Battle comms unlock after combat begins."
-          placeholder="Available after Start Battle..."
+          placeholder="Available after battle begins..."
         />
       </div>
 
       {summaryData && <BattleSummary data={summaryData} messages={messages} />}
 
-      {isPlanning && !battleStartPending && (
+      {isPreBattleFlow && (
         <>
           {!planningOverlayVisible && (
             <div
@@ -391,129 +469,261 @@ export function BattleHUD() {
                 justifyContent: 'center',
                 pointerEvents: 'none',
               }}
-            >
-              <div
-                style={{
-                  width: 'min(500px, calc(100% - 48px))',
-                  padding: '14px',
-                  borderRadius: '10px',
-                  border: '1px solid #5b3f1f',
-                  backgroundColor: '#120d09e8',
-                  boxShadow: '0 16px 36px rgba(0,0,0,0.38)',
-                  color: '#eadfc7',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  pointerEvents: 'auto',
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <div>
-                    <div style={{ color: '#ffd700', fontSize: '17px', marginBottom: '4px' }}>Battle Start</div>
-                    <div style={{ color: '#cdbd97', fontSize: '13px' }}>
-                      Optional: send an opening order, review the plan on the right, then start combat.
+                <div
+                  style={{
+                    width: 'min(520px, calc(100% - 48px))',
+                    padding: '14px',
+                    borderRadius: '10px',
+                    border: '1px solid #5b3f1f',
+                    backgroundColor: '#120d09e8',
+                    boxShadow: '0 16px 36px rgba(0,0,0,0.38)',
+                    color: '#eadfc7',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                    <div>
+                      <div style={{ color: '#ffd700', fontSize: '17px', marginBottom: '4px' }}>
+                        Battle Planner
+                      </div>
+                      <div style={{ color: '#cdbd97', fontSize: '13px' }}>
+                        Generate an opening strategy first, then approve it to start combat.
+                      </div>
                     </div>
+                    <button
+                      onClick={() => setPlanningOverlayVisible(false)}
+                      style={{
+                        padding: '5px 9px',
+                        borderRadius: '6px',
+                        border: '1px solid #6c5630',
+                        backgroundColor: '#22170f',
+                        color: '#d7c08e',
+                        cursor: 'pointer',
+                        fontFamily: '"NeoDunggeunmoPro", monospace',
+                        fontSize: '13px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Hide Panel
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setPlanningOverlayVisible(false)}
-                    style={{
-                      padding: '5px 9px',
-                      borderRadius: '6px',
-                      border: '1px solid #6c5630',
-                      backgroundColor: '#22170f',
-                      color: '#d7c08e',
-                      cursor: 'pointer',
-                      fontFamily: '"NeoDunggeunmoPro", monospace',
-                      fontSize: '13px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Hide Panel
-                  </button>
-                </div>
 
-                <PlayerChatComposer
-                  heroes={battleState?.heroes ?? []}
-                  activeHeroId={activeHero?.id ?? null}
-                  onActiveHeroChange={setActiveHeroId}
-                  onSend={handleSend}
-                  layout="compact"
-                  title="Initial Command"
-                  helperText="Optional opening order before the battle starts"
-                  placeholder="Optional: @Commander hold behind the center wall..."
-                  sendLabel="Send Order"
-                  footerText="You can hide this panel to inspect the battlefield, then reopen it to send a command or start."
-                  rows={3}
-                />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ color: '#9f957e', fontSize: '12px' }}>
-                    The initial command is optional. Bottom battle chat stays disabled until combat begins.
+                  <div style={{ color: '#8fc7ff', fontSize: '13px' }}>
+                    Active commander: @{activeHero?.name ?? 'none'}
                   </div>
-                  <button
-                    onClick={startBattle}
-                    style={{
-                      padding: '8px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid #8b5a2b',
-                      backgroundColor: '#ffd700',
-                      color: '#000',
-                      cursor: 'pointer',
-                      fontFamily: '"NeoDunggeunmoPro", monospace',
-                      fontSize: '14px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Start Battle
-                  </button>
+
+                  {openingStrategy?.status === 'error' && (
+                    <div
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #7a3f32',
+                        backgroundColor: '#28110ddd',
+                        color: '#ffb19d',
+                        fontSize: '12px',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {openingStrategy?.errorMessage ?? 'Unable to generate a strategy plan.'}
+                    </div>
+                  )}
+
+                  {(isPlannerIdle || openingStrategy?.status === 'error') && (
+                    <>
+                      <textarea
+                        value={plannerPrompt}
+                        onChange={(event) => setPlannerPrompt(event.target.value)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onKeyUp={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onMouseDown={(event) => {
+                          event.stopPropagation();
+                        }}
+                        onFocus={(event) => {
+                          event.stopPropagation();
+                        }}
+                        placeholder="Optional: hide behind bottom rocks to counter later, then when combat starts target the archers first."
+                        rows={4}
+                        style={{
+                          width: '100%',
+                          minHeight: '96px',
+                          resize: 'none',
+                          borderRadius: '6px',
+                          border: '1px solid #3e311b',
+                          backgroundColor: '#0b0907',
+                          color: '#f4efe0',
+                          padding: '10px 12px',
+                          boxSizing: 'border-box',
+                          fontFamily: '"NeoDunggeunmoPro", monospace',
+                          fontSize: '14px',
+                          lineHeight: 1.35,
+                          outline: 'none',
+                        }}
+                      />
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ color: '#9f957e', fontSize: '12px' }}>
+                          The prompt is optional. Blank prompts still generate a tactical opener.
+                        </div>
+                        <button
+                          onClick={generatePlan}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '6px',
+                            border: '1px solid #8b5a2b',
+                            backgroundColor: '#ffd700',
+                            color: '#000',
+                            cursor: 'pointer',
+                            fontFamily: '"NeoDunggeunmoPro", monospace',
+                            fontSize: '14px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Generate Plan
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {isPlanGenerating && (
+                    <div
+                      style={{
+                        padding: '14px',
+                        borderRadius: '8px',
+                        border: '1px solid #5b3f1f',
+                        backgroundColor: '#17110ccc',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ color: '#ffd700', fontSize: '17px' }}>Planning Strategy...</div>
+                      <div style={{ color: '#d7c79e', fontSize: '13px', lineHeight: 1.5 }}>
+                        The commander is shaping the opening move and any reserved follow-up orders.
+                      </div>
+                      <div style={{ color: '#9f957e', fontSize: '12px' }}>
+                        {plannerPrompt ? `Prompt: "${plannerPrompt}"` : 'Using a blank prompt for a default opener.'}
+                      </div>
+                    </div>
+                  )}
+
+                  {isPlanReady && openingStrategy?.status === 'ready' && (
+                    <>
+                      <div
+                        style={{
+                          padding: '10px',
+                          borderRadius: '8px',
+                          border: '1px solid #3b3b3b',
+                          backgroundColor: '#17140f',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                        }}
+                      >
+                        <div style={{ color: '#ffd700', fontSize: '13px' }}>Opening Order</div>
+                        <div style={{ color: '#f0e4c8', fontSize: '14px', lineHeight: 1.45 }}>
+                          {openingStrategy.openingChatResponse}
+                        </div>
+                        <div style={{ color: '#cdbd97', fontSize: '12px', lineHeight: 1.45 }}>
+                          {openingStrategy.planSummary}
+                        </div>
+                        <PlanRow
+                          label="Open"
+                          value={formatPlan(openingStrategy.openingDecision)}
+                          color="#ffd700"
+                        />
+                        <PlanRow
+                          label="Chain"
+                          value={openingStrategy.reservedSteps.length > 0 ? `${openingStrategy.reservedSteps.length} follow-up step(s)` : 'none'}
+                          color="#8fc7ff"
+                        />
+                      </div>
+
+                      {openingStrategy.reservedSteps.length > 0 && (
+                        <div
+                          style={{
+                            padding: '10px',
+                            borderRadius: '8px',
+                            border: '1px solid #3b3b3b',
+                            backgroundColor: '#141914',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ color: '#8fc7ff', fontSize: '13px' }}>Reserved Follow-Ups</div>
+                          {openingStrategy.reservedSteps.map((step, index) => (
+                            <div
+                              key={`${step.trigger}-${index}`}
+                              style={{
+                                paddingTop: index === 0 ? 0 : '8px',
+                                borderTop: index === 0 ? 'none' : '1px solid #243025',
+                              }}
+                            >
+                              <div style={{ color: '#c8f08a', fontSize: '12px', marginBottom: '3px' }}>
+                                Step {index + 2} on {formatTriggerLabel(step.trigger)}
+                              </div>
+                              <div style={{ color: '#e6dbc0', fontSize: '12px', marginBottom: '4px', lineHeight: 1.4 }}>
+                                {step.summary}
+                              </div>
+                              <div style={{ color: '#9f957e', fontSize: '12px' }}>
+                                {formatReservedStep(step)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                        <button
+                          onClick={revisePlan}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '6px',
+                            border: '1px solid #6c5630',
+                            backgroundColor: '#22170f',
+                            color: '#d7c08e',
+                            cursor: 'pointer',
+                            fontFamily: '"NeoDunggeunmoPro", monospace',
+                            fontSize: '14px',
+                          }}
+                        >
+                          Revise Plan
+                        </button>
+                        <button
+                          onClick={approvePlan}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '6px',
+                            border: '1px solid #8b5a2b',
+                            backgroundColor: '#ffd700',
+                            color: '#000',
+                            cursor: 'pointer',
+                            fontFamily: '"NeoDunggeunmoPro", monospace',
+                            fontSize: '14px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Approve & Start
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
             </div>
           )}
         </>
-      )}
-
-      {(battleStartPending || isStrategyLoading) && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: '1024px',
-            height: '768px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'auto',
-            backgroundColor: 'rgba(10, 8, 6, 0.48)',
-          }}
-        >
-          <div
-            style={{
-              width: 'min(420px, calc(100% - 48px))',
-              padding: '16px',
-              borderRadius: '10px',
-              border: '1px solid #5b3f1f',
-              backgroundColor: '#120d09f0',
-              boxShadow: '0 16px 36px rgba(0,0,0,0.38)',
-              color: '#eadfc7',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ color: '#ffd700', fontSize: '17px' }}>Loading Strategy...</div>
-            <div style={{ color: '#d7c79e', fontSize: '13px', lineHeight: 1.5 }}>
-              The commander is finalizing the opening plan. Battle starts automatically when the first strategy is ready.
-            </div>
-            <div style={{ color: '#9f957e', fontSize: '12px' }}>
-              {currentDecision
-                ? `Current draft: ${formatPlan(currentDecision)}`
-                : 'Waiting for the first opening order...'}
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
@@ -557,6 +767,18 @@ function formatIntentLabel(decision: HeroDecision | undefined): string {
   }
 
   return decision.intent;
+}
+
+function formatOpeningStepLabel(activeStepIndex: number): string {
+  return activeStepIndex <= 0 ? 'opening' : `follow-up ${activeStepIndex}`;
+}
+
+function formatTriggerLabel(trigger: ReservedChainStep['trigger']): string {
+  return trigger === 'enemy_in_range' ? 'enemy in range' : 'combat started';
+}
+
+function formatReservedStep(step: ReservedChainStep): string {
+  return `${formatPlan(step)} | "${step.chatResponse}"`;
 }
 
 function formatPlan(

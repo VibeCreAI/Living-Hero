@@ -1,4 +1,4 @@
-import { IntentType, UnitGroup } from '../types';
+import { ChainControl, ChainTriggerType, IntentType, UnitGroup } from '../types';
 import { OLLAMA_CONFIG } from './config';
 
 export interface ChatMessage {
@@ -22,15 +22,36 @@ export interface LLMRawDecisionPlan {
   groupOrders?: LLMGroupOrder[];
 }
 
+export interface LLMRawReservedChainStep extends LLMRawDecisionPlan {
+  trigger: ChainTriggerType;
+  chatResponse: string;
+  summary: string;
+}
+
+export interface LLMRawOpeningPlan extends LLMRawDecisionPlan {
+  chatResponse: string;
+  planSummary: string;
+  reservedSteps?: LLMRawReservedChainStep[];
+}
+
 /** Raw decision as the LLM produces it — needs resolution before becoming a HeroDecision */
 export interface LLMRawDecision extends LLMRawDecisionPlan {
   chatResponse: string;
   playerOrderInterpretation?: LLMRawDecisionPlan;
+  chainControl?: ChainControl;
 }
 
 export interface LLMResponse {
   chatResponse: string;
   raw: LLMRawDecision;
+}
+
+export interface LLMOpeningPlanResponse {
+  raw: LLMRawOpeningPlan;
+}
+
+export interface LLMReservedStepResponse {
+  reservedSteps: LLMRawReservedChainStep[];
 }
 
 export interface LLMRequestOptions {
@@ -93,6 +114,28 @@ const OPTIONAL_PLAYER_ORDER_SCHEMA = {
   required: ['intent'],
 };
 
+const CHAIN_CONTROL_SCHEMA = {
+  type: 'string',
+  enum: ['keep', 'break'],
+};
+
+const RESERVED_CHAIN_STEP_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      chatResponse: { type: 'string', minLength: 1 },
+      summary: { type: 'string', minLength: 1 },
+      trigger: {
+        type: 'string',
+        enum: ['enemy_in_range', 'combat_started'],
+      },
+      ...DECISION_PLAN_PROPERTIES,
+    },
+    required: ['chatResponse', 'summary', 'trigger', 'intent'],
+  },
+};
+
 /** JSON schema sent to Ollama structured outputs to guarantee valid response */
 const DECISION_SCHEMA = {
   type: 'object',
@@ -100,8 +143,28 @@ const DECISION_SCHEMA = {
     chatResponse: { type: 'string', minLength: 1 },
     ...DECISION_PLAN_PROPERTIES,
     playerOrderInterpretation: OPTIONAL_PLAYER_ORDER_SCHEMA,
+    chainControl: CHAIN_CONTROL_SCHEMA,
   },
   required: ['chatResponse', 'intent'],
+};
+
+const OPENING_PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    chatResponse: { type: 'string', minLength: 1 },
+    planSummary: { type: 'string', minLength: 1 },
+    ...DECISION_PLAN_PROPERTIES,
+    reservedSteps: RESERVED_CHAIN_STEP_SCHEMA,
+  },
+  required: ['chatResponse', 'planSummary', 'intent'],
+};
+
+const RESERVED_STEPS_ONLY_SCHEMA = {
+  type: 'object',
+  properties: {
+    reservedSteps: RESERVED_CHAIN_STEP_SCHEMA,
+  },
+  required: ['reservedSteps'],
 };
 
 const VALID_INTENTS: IntentType[] = [
@@ -114,6 +177,8 @@ const VALID_INTENTS: IntentType[] = [
 ];
 
 const VALID_GROUPS: UnitGroup[] = ['all', 'hero', 'warriors', 'archers'];
+const VALID_CHAIN_CONTROLS: ChainControl[] = ['keep', 'break'];
+const VALID_CHAIN_TRIGGERS: ChainTriggerType[] = ['enemy_in_range', 'combat_started'];
 
 export class LLMClient {
   private baseUrl: string;
@@ -148,6 +213,31 @@ export class LLMClient {
     messages: ChatMessage[],
     options: LLMRequestOptions = {}
   ): Promise<LLMResponse> {
+    const content = await this.sendStructuredChat(messages, DECISION_SCHEMA, options);
+    return this.parseResponse(content);
+  }
+
+  async planOpeningStrategy(
+    messages: ChatMessage[],
+    options: LLMRequestOptions = {}
+  ): Promise<LLMOpeningPlanResponse> {
+    const content = await this.sendStructuredChat(messages, OPENING_PLAN_SCHEMA, options);
+    return this.parseOpeningPlanResponse(content);
+  }
+
+  async planReservedSteps(
+    messages: ChatMessage[],
+    options: LLMRequestOptions = {}
+  ): Promise<LLMReservedStepResponse> {
+    const content = await this.sendStructuredChat(messages, RESERVED_STEPS_ONLY_SCHEMA, options);
+    return this.parseReservedStepResponse(content);
+  }
+
+  private async sendStructuredChat(
+    messages: ChatMessage[],
+    schema: Record<string, unknown>,
+    options: LLMRequestOptions = {}
+  ): Promise<string> {
     const maxTokens = options.maxTokens ?? OLLAMA_CONFIG.maxTokens;
     const temperature = options.temperature ?? OLLAMA_CONFIG.temperature;
     const timeoutMs = options.timeoutMs ?? OLLAMA_CONFIG.timeoutMs;
@@ -155,7 +245,7 @@ export class LLMClient {
       model: this.model,
       messages,
       stream: false,
-      format: DECISION_SCHEMA,
+      format: schema,
       options: {
         num_predict: maxTokens,
         temperature,
@@ -174,9 +264,7 @@ export class LLMClient {
     }
 
     const data = await resp.json();
-    const content: string = data.message?.content ?? '';
-
-    return this.parseResponse(content);
+    return data.message?.content ?? '';
   }
 
   private parseResponse(content: string): LLMResponse {
@@ -185,11 +273,33 @@ export class LLMClient {
       chatResponse: raw.chatResponse ?? '',
       ...this.parseRequiredDecisionPlan(raw),
       playerOrderInterpretation: this.parseOptionalDecisionPlan(raw.playerOrderInterpretation),
+      chainControl: VALID_CHAIN_CONTROLS.includes(raw.chainControl) ? raw.chainControl : undefined,
     };
 
     return {
       chatResponse: decision.chatResponse,
       raw: decision,
+    };
+  }
+
+  private parseOpeningPlanResponse(content: string): LLMOpeningPlanResponse {
+    const raw = JSON.parse(content);
+    const openingPlan: LLMRawOpeningPlan = {
+      chatResponse: raw.chatResponse ?? '',
+      planSummary: typeof raw.planSummary === 'string' ? raw.planSummary : '',
+      ...this.parseRequiredDecisionPlan(raw),
+      reservedSteps: this.parseReservedSteps(raw.reservedSteps),
+    };
+
+    return {
+      raw: openingPlan,
+    };
+  }
+
+  private parseReservedStepResponse(content: string): LLMReservedStepResponse {
+    const raw = JSON.parse(content);
+    return {
+      reservedSteps: this.parseReservedSteps(raw.reservedSteps) ?? [],
     };
   }
 
@@ -223,7 +333,10 @@ export class LLMClient {
           .map((go: any): LLMGroupOrder | null => {
             const group = VALID_GROUPS.includes(go?.group) ? go.group : null;
             const goIntent = VALID_INTENTS.includes(go?.intent) ? go.intent : null;
-            if (!group || !goIntent) return null;
+            if (!group || !goIntent) {
+              return null;
+            }
+
             return {
               group,
               intent: goIntent,
@@ -235,5 +348,31 @@ export class LLMClient {
       : undefined;
 
     return groupOrders && groupOrders.length > 0 ? groupOrders : undefined;
+  }
+
+  private parseReservedSteps(rawReservedSteps: any): LLMRawReservedChainStep[] | undefined {
+    const reservedSteps = Array.isArray(rawReservedSteps)
+      ? rawReservedSteps
+          .map((step: any): LLMRawReservedChainStep | null => {
+            const trigger = VALID_CHAIN_TRIGGERS.includes(step?.trigger) ? step.trigger : null;
+            const chatResponse = typeof step?.chatResponse === 'string' ? step.chatResponse.trim() : '';
+            const summary = typeof step?.summary === 'string' ? step.summary.trim() : '';
+            const plan = this.parseOptionalDecisionPlan(step);
+            if (!trigger || !chatResponse || !summary || !plan) {
+              return null;
+            }
+
+            return {
+              ...plan,
+              trigger,
+              chatResponse,
+              summary,
+            };
+          })
+          .filter((step: LLMRawReservedChainStep | null): step is LLMRawReservedChainStep => step !== null)
+          .slice(0, 2)
+      : undefined;
+
+    return reservedSteps && reservedSteps.length > 0 ? reservedSteps : undefined;
   }
 }

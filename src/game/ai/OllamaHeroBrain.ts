@@ -1,10 +1,18 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
-import { GroupOrder, HeroDecision, HeroSummary } from '../types';
+import {
+  ChainControl,
+  GroupOrder,
+  HeroDecision,
+  HeroSummary,
+  ReservedChainStep,
+  UnitGroup,
+} from '../types';
 import {
   ChatMessage,
   LLMClient,
   LLMGroupOrder,
   LLMRawDecisionPlan,
+  LLMRawReservedChainStep,
 } from './LLMClient';
 import { buildHeroSystemPrompt } from './heroPrompts';
 import { buildContextPrompt } from './contextBuilder';
@@ -23,7 +31,17 @@ export interface OllamaDecisionResult {
   chatResponse: string;
   positionMenu: TacticalPositionMenuResult;
   vocabulary: BattleVocabulary;
+  chainControl?: ChainControl;
   source: 'llm' | 'fallback';
+}
+
+export interface OllamaOpeningPlanResult {
+  openingDecision: HeroDecision;
+  planSummary: string;
+  reservedSteps: ReservedChainStep[];
+  chatResponse: string;
+  positionMenu: TacticalPositionMenuResult;
+  vocabulary: BattleVocabulary;
 }
 
 const FALLBACK_DECISION: HeroDecision = {
@@ -36,7 +54,8 @@ const FALLBACK_DECISION: HeroDecision = {
 export class OllamaHeroBrain implements IHeroDecisionProvider {
   private client: LLMClient;
   private fallback: LocalRuleBasedHeroBrain;
-  private pending = false;
+  private pendingDecision = false;
+  private pendingOpeningPlanPromise: Promise<OllamaOpeningPlanResult> | null = null;
 
   vocabulary: BattleVocabulary = new BattleVocabulary();
   lastLatencyMs = 0;
@@ -62,7 +81,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     terrainDescription?: string,
     options: { openingStrategy?: boolean } = {}
   ): Promise<OllamaDecisionResult> {
-    if (this.pending) {
+    if (this.pendingDecision) {
       return {
         decision: FALLBACK_DECISION,
         chatResponse: '',
@@ -72,7 +91,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
       };
     }
 
-    this.pending = true;
+    this.pendingDecision = true;
 
     try {
       const isHealthy = this.client.isAvailable() || (await this.client.healthCheck());
@@ -124,6 +143,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         chatResponse: this.normalizeChatResponse(response.chatResponse, decision),
         positionMenu,
         vocabulary: this.vocabulary,
+        chainControl: response.raw.chainControl,
         source: 'llm',
       };
     } catch {
@@ -137,7 +157,129 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         source: 'fallback',
       };
     } finally {
-      this.pending = false;
+      this.pendingDecision = false;
+    }
+  }
+
+  async planOpeningStrategyAsync(
+    summary: HeroSummary,
+    playerMessage?: string,
+    terrainDescription?: string
+  ): Promise<OllamaOpeningPlanResult> {
+    if (this.pendingOpeningPlanPromise) {
+      return this.pendingOpeningPlanPromise;
+    }
+
+    this.pendingOpeningPlanPromise = (async () => {
+      const isHealthy = this.client.isAvailable() || (await this.client.healthCheck());
+      if (!isHealthy) {
+        throw new Error('Ollama unavailable');
+      }
+
+      const positionMenu = buildTacticalPositionMenu(summary);
+      const systemPrompt = buildHeroSystemPrompt(summary.heroState);
+      const contextPrompt = buildContextPrompt(
+        summary,
+        positionMenu,
+        this.vocabulary,
+        playerMessage,
+        terrainDescription,
+        {
+          openingStrategy: true,
+          openingPlanMode: true,
+        }
+      );
+
+      const messages: ChatMessage[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: contextPrompt },
+      ];
+
+      const requestOptions = {
+        maxTokens: OLLAMA_CONFIG.openingMaxTokens,
+        temperature: OLLAMA_CONFIG.openingTemperature,
+        timeoutMs: OLLAMA_CONFIG.openingTimeoutMs,
+      };
+
+      try {
+        const start = performance.now();
+        const response = await this.client.planOpeningStrategy(messages, requestOptions);
+        this.lastLatencyMs = performance.now() - start;
+        this.llmCallCount++;
+
+        const openingDecision = this.resolveRawDecision(
+          response.raw,
+          summary,
+          positionMenu,
+          'opening_plan'
+        );
+        let reservedSteps = (response.raw.reservedSteps ?? []).map((step, index) =>
+          this.resolveReservedStep(step, summary, positionMenu, `opening_chain_${index + 1}`)
+        );
+        if (reservedSteps.length === 0) {
+          reservedSteps = await this.generateReservedSteps(
+            messages,
+            response.raw,
+            summary,
+            positionMenu,
+            requestOptions
+          );
+        }
+        const chatResponse = this.normalizeChatResponse(response.raw.chatResponse, openingDecision);
+        const planSummary = this.normalizePlanSummary(
+          response.raw.planSummary,
+          openingDecision,
+          reservedSteps
+        );
+
+        return {
+          openingDecision,
+          planSummary,
+          reservedSteps,
+          chatResponse,
+          positionMenu,
+          vocabulary: this.vocabulary,
+        };
+      } catch {
+        const start = performance.now();
+        const response = await this.client.chat(messages, requestOptions);
+        this.lastLatencyMs = performance.now() - start;
+        this.llmCallCount++;
+
+        const openingDecision = this.resolveRawDecision(
+          response.raw,
+          summary,
+          positionMenu,
+          'opening_plan_fallback'
+        );
+        const chatResponse = this.normalizeChatResponse(response.chatResponse, openingDecision);
+        const reservedSteps = await this.generateReservedSteps(
+          messages,
+          {
+            ...response.raw,
+            chatResponse,
+            planSummary: '',
+          },
+          summary,
+          positionMenu,
+          requestOptions
+        );
+
+        return {
+          openingDecision,
+          planSummary: this.normalizePlanSummary('', openingDecision, reservedSteps),
+          reservedSteps,
+          chatResponse,
+          positionMenu,
+          vocabulary: this.vocabulary,
+        };
+      }
+    })();
+
+    try {
+      return await this.pendingOpeningPlanPromise;
+    } finally {
+      this.pendingOpeningPlanPromise = null;
     }
   }
 
@@ -186,6 +328,21 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         ? `${rationalePrefix}_group_orders`
         : `${rationalePrefix}_${raw.intent}`,
       recheckInSec,
+    };
+  }
+
+  private resolveReservedStep(
+    raw: LLMRawReservedChainStep,
+    summary: HeroSummary,
+    positionMenu: TacticalPositionMenuResult,
+    rationalePrefix: string
+  ): ReservedChainStep {
+    const decision = this.resolveRawDecision(raw, summary, positionMenu, rationalePrefix);
+    return {
+      ...decision,
+      trigger: raw.trigger,
+      chatResponse: this.normalizeChatResponse(raw.chatResponse, decision),
+      summary: this.normalizeReservedStepSummary(raw.summary, decision),
     };
   }
 
@@ -238,10 +395,102 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     return this.buildFallbackChatResponse(decision);
   }
 
+  private normalizePlanSummary(
+    planSummary: string,
+    openingDecision: HeroDecision,
+    reservedSteps: ReservedChainStep[]
+  ): string {
+    const trimmed = planSummary.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+
+    const firstFollowUp = reservedSteps[0]?.summary;
+    return firstFollowUp
+      ? `${this.describeDecision(openingDecision)} Then ${firstFollowUp}.`
+      : this.describeDecision(openingDecision);
+  }
+
+  private normalizeReservedStepSummary(summary: string, decision: HeroDecision): string {
+    const trimmed = summary.trim();
+    return trimmed || this.describeDecision(decision);
+  }
+
+  private async generateReservedSteps(
+    messages: ChatMessage[],
+    openingPlan: LLMRawDecisionPlan & { chatResponse?: string; planSummary?: string },
+    summary: HeroSummary,
+    positionMenu: TacticalPositionMenuResult,
+    requestOptions: { maxTokens: number; temperature: number; timeoutMs: number }
+  ): Promise<ReservedChainStep[]> {
+    const refinementMessages: ChatMessage[] = [
+      ...messages,
+      {
+        role: 'assistant',
+        content: JSON.stringify({
+          chatResponse: openingPlan.chatResponse ?? '',
+          planSummary: openingPlan.planSummary ?? '',
+          intent: openingPlan.intent,
+          targetName: openingPlan.targetName,
+          moveOption: openingPlan.moveOption,
+          priority: openingPlan.priority,
+          groupOrders: openingPlan.groupOrders,
+        }),
+      },
+      {
+        role: 'user',
+        content:
+          'CHAIN REFINEMENT MODE: keep the approved opening decision above. Now add 1 or 2 reserved follow-up steps for first contact and combat_started whenever sensible. Prefer enemy_in_range for the first contact step and combat_started for the next commitment step. Return no empty array unless there is truly no meaningful continuation.',
+      },
+    ];
+
+    try {
+      const response = await this.client.planReservedSteps(refinementMessages, {
+        maxTokens: Math.min(requestOptions.maxTokens, 220),
+        temperature: requestOptions.temperature,
+        timeoutMs: Math.min(requestOptions.timeoutMs, 6000),
+      });
+
+      return response.reservedSteps.map((step, index) =>
+        this.resolveReservedStep(step, summary, positionMenu, `opening_chain_refined_${index + 1}`)
+      );
+    } catch {
+      return [];
+    }
+  }
+
   private mentionsSplitGroups(chatResponse: string): boolean {
     return /(?:^|[.!?]\s*)warriors\b|(?:^|[.!?]\s*)(?:archers|ranged)\b|\bwarriors\b.*\b(?:archers|ranged)\b|\b(?:archers|ranged)\b.*\bwarriors\b/i.test(
       chatResponse
     );
+  }
+
+  private describeDecision(decision: HeroDecision): string {
+    if (decision.groupOrders?.length) {
+      return this.buildGroupOrdersAck(decision.groupOrders);
+    }
+
+    const targetName = decision.targetId
+      ? this.vocabulary.getNickname(decision.targetId)
+      : undefined;
+    const moveLabel = decision.moveToTile
+      ? `[${decision.moveToTile.col}, ${decision.moveToTile.row}]`
+      : undefined;
+
+    switch (decision.intent) {
+      case 'focus_enemy':
+        return targetName ? `Focus ${targetName}.` : 'Focus the marked enemy.';
+      case 'protect_target':
+        return targetName ? `Protect ${targetName}.` : 'Protect the line.';
+      case 'advance_to_point':
+        return moveLabel ? `Advance to ${moveLabel}.` : 'Advance to the marked position.';
+      case 'retreat_to_point':
+        return moveLabel ? `Retreat to ${moveLabel}.` : 'Retreat to the marked position.';
+      case 'hold_position':
+        return moveLabel ? `Hold at ${moveLabel}.` : 'Hold this ground.';
+      case 'use_skill':
+        return 'Use your skill on cue.';
+    }
   }
 
   private buildArmyOnlyAck(decision: HeroDecision): string {
@@ -300,11 +549,12 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
   }
 
   private describeGroupOrder(groupOrder: GroupOrder): string {
-    const label = groupOrder.group === 'archers'
-      ? 'Ranged'
-      : groupOrder.group === 'hero'
-        ? 'I'
-        : 'Warriors';
+    const label =
+      groupOrder.group === 'archers'
+        ? 'Ranged'
+        : groupOrder.group === 'hero'
+          ? 'I'
+          : 'Warriors';
     const targetName = groupOrder.targetId
       ? this.vocabulary.getNickname(groupOrder.targetId)
       : undefined;

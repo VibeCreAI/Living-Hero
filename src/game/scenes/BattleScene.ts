@@ -9,6 +9,8 @@ import {
   Position,
   UnitRole,
   PlayerChatMessageEvent,
+  BattlePlanRequestEvent,
+  BattlePlanApprovalEvent,
   PortalFloorNumber,
   PathfindingBenchmarkResult,
 } from '../types';
@@ -35,7 +37,9 @@ export class BattleScene extends Scene {
   private sceneData: BattleSceneData = { nodeId: '', difficulty: 1, mode: 'battle' };
   private escapeKey!: Phaser.Input.Keyboard.Key;
   private playerChatHandler?: (message: PlayerChatMessageEvent) => void;
-  private battleStartHandler?: () => void;
+  private battlePlanRequestHandler?: (event: BattlePlanRequestEvent) => void;
+  private battlePlanApproveHandler?: (event: BattlePlanApprovalEvent) => void;
+  private battlePlanReviseHandler?: (event: BattlePlanApprovalEvent) => void;
   private playgroundExitHandler?: () => void;
   private returnToOverworldHandler?: () => void;
   private replayBattleHandler?: () => void;
@@ -108,15 +112,35 @@ export class BattleScene extends Scene {
     };
     EventBus.on('player-chat-message', this.playerChatHandler);
 
-    this.battleStartHandler = () => {
+    this.battlePlanRequestHandler = (event: BattlePlanRequestEvent) => {
       if (this.sceneData.mode !== 'battle') {
         return;
       }
 
-      this.battleLoop.startBattle();
+      this.battleLoop.requestOpeningPlan(event);
       EventBus.emit('battle-state-update', this.battleLoop.getState());
     };
-    EventBus.on('battle-start-requested', this.battleStartHandler);
+    EventBus.on('battle-plan-requested', this.battlePlanRequestHandler);
+
+    this.battlePlanApproveHandler = (event: BattlePlanApprovalEvent) => {
+      if (this.sceneData.mode !== 'battle') {
+        return;
+      }
+
+      this.battleLoop.approveOpeningPlan(event);
+      EventBus.emit('battle-state-update', this.battleLoop.getState());
+    };
+    EventBus.on('battle-plan-approved', this.battlePlanApproveHandler);
+
+    this.battlePlanReviseHandler = (event: BattlePlanApprovalEvent) => {
+      if (this.sceneData.mode !== 'battle') {
+        return;
+      }
+
+      this.battleLoop.reviseOpeningPlan(event.targetHeroIds);
+      EventBus.emit('battle-state-update', this.battleLoop.getState());
+    };
+    EventBus.on('battle-plan-revise-requested', this.battlePlanReviseHandler);
 
     this.playgroundExitHandler = () => {
       if (this.sceneData.mode === 'playground') {
@@ -209,9 +233,17 @@ export class BattleScene extends Scene {
       EventBus.removeListener('player-chat-message', this.playerChatHandler);
       this.playerChatHandler = undefined;
     }
-    if (this.battleStartHandler) {
-      EventBus.removeListener('battle-start-requested', this.battleStartHandler);
-      this.battleStartHandler = undefined;
+    if (this.battlePlanRequestHandler) {
+      EventBus.removeListener('battle-plan-requested', this.battlePlanRequestHandler);
+      this.battlePlanRequestHandler = undefined;
+    }
+    if (this.battlePlanApproveHandler) {
+      EventBus.removeListener('battle-plan-approved', this.battlePlanApproveHandler);
+      this.battlePlanApproveHandler = undefined;
+    }
+    if (this.battlePlanReviseHandler) {
+      EventBus.removeListener('battle-plan-revise-requested', this.battlePlanReviseHandler);
+      this.battlePlanReviseHandler = undefined;
     }
     if (this.playgroundExitHandler) {
       EventBus.removeListener('playground-exit-requested', this.playgroundExitHandler);

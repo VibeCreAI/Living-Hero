@@ -154,6 +154,13 @@ export class IntentExecutor {
         decision: this.expandGroupOrder(decision, heroGroupOrder),
         allies: ownedAllies,
       };
+    } else if (usesScopedGroupOrders && heroUnit?.isAlive()) {
+      // Split orders often omit the hero group. Keep the hero on the base plan
+      // instead of leaving the combat unit idle with no assignment at all.
+      heroAssignment = {
+        decision: this.cloneDecision(baseDecision),
+        allies: ownedAllies,
+      };
     }
 
     for (const groupOrder of orderedGroupOrders) {

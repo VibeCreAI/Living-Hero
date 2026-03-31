@@ -16,10 +16,17 @@ interface DecisionEntry {
 export function DecisionTimeline({ activeHeroId }: { activeHeroId: string | null }) {
   const [entries, setEntries] = useState<DecisionEntry[]>([]);
   const lastDecisionKeyRef = useRef('');
+  const sessionIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (state: BattleState) => {
+      if (sessionIdRef.current !== state.sessionId) {
+        sessionIdRef.current = state.sessionId;
+        lastDecisionKeyRef.current = '';
+        setEntries([]);
+      }
+
       if (state.heroes.length === 0) {
         return;
       }

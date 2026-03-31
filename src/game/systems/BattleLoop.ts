@@ -7,6 +7,8 @@ import {
   BattleMode,
   DamageEvent,
   PlayerChatMessageEvent,
+  BattlePlanRequestEvent,
+  BattlePlanApprovalEvent,
   BattleGridConfig,
   TileCoord,
   PortalFloorNumber,
@@ -96,7 +98,7 @@ export class BattleLoop {
   private battleGrid!: BattleGrid;
   private stopHealthChecks: (() => void) | null = null;
   private mode: BattleMode = 'battle';
-  private planningRequested = false;
+  private openingPlanHeroIds: string[] = [];
   private layout: BattleMapLayout = {};
 
   private allDamageEvents: DamageEvent[] = [];
@@ -121,27 +123,52 @@ export class BattleLoop {
   setPlayerDirective(event: PlayerChatMessageEvent): void {
     const targetHeroIds =
       event.targetHeroIds.length > 0 ? event.targetHeroIds : this.heroes.map((hero) => hero.state.id);
-    this.heroScheduler.setPlayerDirective(event.text, targetHeroIds);
-    if (this.mode === 'battle' && this.stateManager.getState().phase === 'init') {
-      this.planningRequested = true;
-    }
+    this.heroScheduler.setPlayerDirective(event.text, targetHeroIds, this.heroes);
   }
 
-  startBattle(): void {
+  requestOpeningPlan(event: BattlePlanRequestEvent): void {
     if (this.mode !== 'battle') {
       return;
     }
 
-    if (this.heroScheduler.haveInitialStrategies(this.heroes)) {
-      this.stateManager.setPhase('active');
-      this.planningRequested = false;
+    this.openingPlanHeroIds =
+      event.targetHeroIds.length > 0 ? [...event.targetHeroIds] : this.heroes.map((hero) => hero.state.id);
+    this.heroScheduler.requestOpeningStrategy(
+      event.text,
+      this.openingPlanHeroIds,
+      this.heroes,
+      this.stateManager.getState()
+    );
+    this.stateManager.setPhase('planning');
+  }
+
+  reviseOpeningPlan(targetHeroIds: string[] = this.openingPlanHeroIds): void {
+    if (this.mode !== 'battle') {
       return;
     }
 
-    if (this.stateManager.getState().phase === 'init') {
-      this.stateManager.setPhase('starting');
-      this.planningRequested = true;
+    this.heroScheduler.clearOpeningStrategyDrafts(targetHeroIds, this.heroes);
+    this.stateManager.setPhase('init');
+  }
+
+  approveOpeningPlan(event: BattlePlanApprovalEvent): boolean {
+    if (this.mode !== 'battle') {
+      return false;
     }
+
+    const targetHeroIds =
+      event.targetHeroIds.length > 0 ? event.targetHeroIds : this.openingPlanHeroIds;
+    const approved = this.heroScheduler.approveOpeningStrategies(
+      targetHeroIds,
+      this.heroes,
+      this.stateManager.getState(),
+      this.alliedUnits,
+      this.enemyUnits
+    );
+    if (approved) {
+      this.stateManager.setPhase('active');
+    }
+    return approved;
   }
 
   getObstacleDescription(): string {
@@ -168,6 +195,7 @@ export class BattleLoop {
     this.combatSystem.setObstacles(this.obstacleSystem);
     this.feedbackOverlay.setGrid(this.battleGrid);
     this.heroScheduler.setBattleGrid(this.battleGrid);
+    this.heroScheduler.setObstacles(this.obstacleSystem);
 
     this.spawnHero(scene);
     this.spawnAlliedArmy(scene);
@@ -206,25 +234,27 @@ export class BattleLoop {
     const state = this.stateManager.getState();
 
     if (state.phase === 'init') {
-      if (this.shouldProcessPlanning()) {
-        this.heroScheduler.update(dt, this.heroes, state, this.alliedUnits, this.enemyUnits);
-      }
-
       this.syncVisuals();
       this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
       return null;
     }
 
-    if (state.phase === 'starting') {
-      this.heroScheduler.update(dt, this.heroes, state, this.alliedUnits, this.enemyUnits);
+    if (state.phase === 'planning') {
       this.syncVisuals();
       this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
 
-      if (this.heroScheduler.haveInitialStrategies(this.heroes)) {
-        this.stateManager.setPhase('active');
-        this.planningRequested = false;
+      if (this.heroScheduler.hasReadyOpeningStrategies(this.heroes, this.openingPlanHeroIds)) {
+        this.stateManager.setPhase('ready');
+      } else if (this.heroScheduler.hasOpeningStrategyErrors(this.heroes, this.openingPlanHeroIds)) {
+        this.stateManager.setPhase('init');
       }
 
+      return null;
+    }
+
+    if (state.phase === 'ready') {
+      this.syncVisuals();
+      this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
       return null;
     }
 
@@ -237,6 +267,12 @@ export class BattleLoop {
     const timeSec = this.stateManager.getState().timeSec;
     this.heroScheduler.update(dt, this.heroes, this.stateManager.getState(), this.alliedUnits, this.enemyUnits);
     this.targetingSystem.update(this.alliedUnits, this.enemyUnits, timeSec);
+    this.heroScheduler.processChainTriggers(
+      this.heroes,
+      this.stateManager.getState(),
+      this.alliedUnits,
+      this.enemyUnits
+    );
     this.movementSystem.update(this.alliedUnits, this.enemyUnits, dt, timeSec);
     const damageEvents = this.combatSystem.update(
       this.alliedUnits,
@@ -277,19 +313,6 @@ export class BattleLoop {
       lastLatencyMs: this.ollamaBrain.lastLatencyMs,
     };
   }
-
-  private shouldProcessPlanning(): boolean {
-    if (this.mode !== 'battle') {
-      return false;
-    }
-
-    if (this.planningRequested) {
-      return true;
-    }
-
-    return this.heroes.some((hero) => Boolean(hero.state.currentDirective || hero.state.currentDecision));
-  }
-
   private initObstacles(scene: Scene): void {
     this.obstacleSystem.init(scene, {
       layout: this.resolveObstacleLayout(),
@@ -496,7 +519,7 @@ ${targets}`;
     this.heroes = [];
     this.allDamageEvents = [];
     this.mode = 'battle';
-    this.planningRequested = false;
+    this.openingPlanHeroIds = [];
     this.layout = {};
     this.nodeId = '';
     this.floorNumber = undefined;

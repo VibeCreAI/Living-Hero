@@ -24,10 +24,15 @@ YOUR JOB:
 9. Only fill playerOrderInterpretation when the player's order is clear enough to execute with known groups, nicknames, or position letters. Otherwise omit it.
 10. chatResponse: speak as ${hero.name} IN CHARACTER. Be fierce, tactical, and brief (1 sentence). Never say generic things like "Engaging" - describe YOUR top-level plan, not playerOrderInterpretation.
 11. chatResponse must never be empty.
+12. If the report says "ACTIVE APPROVED CHAIN", default to chainControl = "keep". Only use chainControl = "break" when the report explicitly says the chain is breakable and the approved step is clearly failing.
+13. If the report says "OPENING PLAN MODE", think in phases: opener, first contact, and commitment. Return one opening decision, a short planSummary, and reservedSteps for later triggers whenever you can foresee a sensible continuation.
+14. reservedSteps are follow-up orders only. Use at most 2. In live battle, prefer at least 1 reserved step and often 2 unless there is truly no meaningful contingent follow-up.
+15. reservedSteps may only use triggers: enemy_in_range or combat_started. Use enemy_in_range for first contact and combat_started for the next commitment step whenever they fit.
 
 INTENTS: hold_position, advance_to_point, protect_target, focus_enemy, retreat_to_point, use_skill
 GROUPS: hero, warriors, archers (archers = ranged units)
 OPTIONAL FIELD: playerOrderInterpretation = one structured order object with the same fields as the top-level decision, but no chatResponse.
+OPTIONAL FIELD: chainControl = keep | break
 
 EXAMPLE RESPONSE:
 {"chatResponse": "Warriors, crush that Brute! Ranged, rain fire from the wall!", "intent": "focus_enemy", "targetName": "Enemy Brute", "moveOption": "B", "priority": "high", "groupOrders": [

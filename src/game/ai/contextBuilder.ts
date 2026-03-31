@@ -18,7 +18,7 @@ export function buildContextPrompt(
   vocabulary: BattleVocabulary,
   playerMessage?: string,
   terrainDescription?: string,
-  options: { openingStrategy?: boolean } = {}
+  options: { openingStrategy?: boolean; openingPlanMode?: boolean } = {}
 ): string {
   const parsedDirective = playerMessage
     ? interpretPlayerMessage(summary, playerMessage, terrainDescription)
@@ -61,13 +61,55 @@ Spend extra care on terrain, first contact, group spacing, target priority, and 
 Prefer one coherent opener over a reactive or generic move.`;
   }
 
+  if (options.openingPlanMode) {
+    prompt += `\n\nOPENING PLAN MODE:
+Return one opening decision for the approved battle start.
+Also return a short planSummary for the player review UI.
+Think in phases: opener, first contact, and commitment.
+reservedSteps are follow-up orders only. Use at most 2.
+In live battle, prefer at least 1 reserved step and often 2 unless there is truly no meaningful contingent follow-up.
+Use enemy_in_range for first contact and combat_started for the next commitment step whenever they fit.
+Each reserved step must include its own summary and chatResponse.`;
+  }
+
   if (damageSection) {
     prompt += `\n\nRECENT DAMAGE: ${damageSection}`;
   }
 
+  const openingStrategy = summary.heroState.openingStrategy;
+  if (!options.openingPlanMode && openingStrategy?.status === 'active') {
+    prompt += `\n\nACTIVE APPROVED CHAIN:
+Plan summary: ${openingStrategy.planSummary}
+Current step: ${describeActiveChainStep(openingStrategy)}
+Next trigger: ${openingStrategy.nextTrigger ?? 'none'}
+Breakable now: ${openingStrategy.breakable ? 'yes' : 'no'}
+${formatReservedChainSteps(openingStrategy.reservedSteps, openingStrategy.activeStepIndex)}
+If Breakable now is "no", keep the approved chain.
+If Breakable now is "yes", break only when the approved step is clearly failing or the battlefield has materially changed.`;
+  }
+
   if (playerMessage) {
     prompt += `\n\nPLAYER SAYS: "${playerMessage}"`;
-    if (parsedDirective) {
+    if (options.openingPlanMode) {
+      prompt += '\nUse PLAYER SAYS to shape the opening plan and any reservedSteps.';
+      if (parsedDirective) {
+        prompt += `\nOPENING HINT: ${formatDirectiveHint(parsedDirective, positionMenu)}`;
+        if (parsedDirective.groupOrders?.length) {
+          prompt += '\nOPENING SPLIT HINT:';
+          for (const groupOrder of parsedDirective.groupOrders) {
+            const targetNick = groupOrder.targetId ? vocabulary.getNickname(groupOrder.targetId) : '';
+            const posLabel = groupOrder.moveToTile
+              ? findNearestPositionLabel(groupOrder.moveToTile, positionMenu) ??
+                formatTile(groupOrder.moveToTile)
+              : '';
+            const parts = [`  ${groupOrder.group}: ${groupOrder.intent}`];
+            if (targetNick) parts.push(`target ${targetNick}`);
+            if (posLabel) parts.push(`at ${posLabel.startsWith('[') ? `tile ${posLabel}` : `pos-${posLabel}`}`);
+            prompt += `\n${parts.join(' | ')}`;
+          }
+        }
+      }
+    } else if (parsedDirective) {
       prompt += '\nRULE PARSER: structured directive detected.';
       prompt += `\nHINT: ${formatDirectiveHint(parsedDirective, positionMenu)}`;
       if (parsedDirective.groupOrders?.length) {
@@ -97,7 +139,14 @@ Prefer one coherent opener over a reactive or generic move.`;
 
   prompt += '\n\nGROUP ORDER RULE: If warriors, ranged units, and hero should do different things, include groupOrders. Use the archers group for ranged units in JSON. If groupOrders is empty, chatResponse must describe one army-wide plan only.';
   prompt += '\nchatResponse must be a non-empty spoken order.';
-  prompt += '\nPLAYER ORDER FALLBACK RULE: chatResponse must describe the top-level tactical decision only. Use playerOrderInterpretation only as an optional structured translation of PLAYER SAYS.';
+  if (options.openingPlanMode) {
+    prompt += '\nOPENING PLAN OUTPUT RULE: chatResponse is the spoken opening order for battle start.';
+    prompt += '\nOPENING PLAN OUTPUT RULE: planSummary is for player approval and should be neutral, compact, and easy to review.';
+    prompt += '\nOPENING PLAN OUTPUT RULE: reservedSteps must be later follow-up orders and must not duplicate the opening decision.';
+    prompt += '\nOPENING PLAN OUTPUT RULE: prefer a phased plan with contingent follow-ups over a one-move plan.';
+  } else {
+    prompt += '\nPLAYER ORDER FALLBACK RULE: chatResponse must describe the top-level tactical decision only. Use playerOrderInterpretation only as an optional structured translation of PLAYER SAYS.';
+  }
 
   return prompt;
 }
@@ -278,6 +327,57 @@ function findNearestPositionLabel(
 
 function formatTile(tile: TileCoord): string {
   return `[${tile.col},${tile.row}]`;
+}
+
+function describeActiveChainStep(openingStrategy: HeroSummary['heroState']['openingStrategy']): string {
+  if (!openingStrategy?.openingDecision) {
+    return 'none';
+  }
+
+  if (openingStrategy.activeStepIndex <= 0) {
+    return describeDecision(openingStrategy.openingDecision);
+  }
+
+  const reservedStep = openingStrategy.reservedSteps[openingStrategy.activeStepIndex - 1];
+  return reservedStep ? reservedStep.summary : describeDecision(openingStrategy.openingDecision);
+}
+
+function formatReservedChainSteps(
+  reservedSteps: NonNullable<HeroSummary['heroState']['openingStrategy']>['reservedSteps'],
+  activeStepIndex: number
+): string {
+  if (reservedSteps.length === 0) {
+    return 'Reserved steps: none';
+  }
+
+  const lines = reservedSteps.map((step, index) => {
+    const status =
+      index + 1 < activeStepIndex ? 'completed'
+      : index + 1 === activeStepIndex ? 'active'
+      : 'pending';
+    return `  - ${status}: ${step.trigger} -> ${step.summary}`;
+  });
+  return `Reserved steps:\n${lines.join('\n')}`;
+}
+
+function describeDecision(
+  decision: Pick<HeroSummary['heroState'], 'currentDecision'>['currentDecision'] | Pick<
+    NonNullable<HeroSummary['heroState']['openingStrategy']>['reservedSteps'][number],
+    'intent' | 'moveToTile' | 'targetId'
+  >
+): string {
+  if (!decision) {
+    return 'none';
+  }
+
+  const parts = [decision.intent];
+  if (decision.targetId) {
+    parts.push(`target ${decision.targetId}`);
+  }
+  if (decision.moveToTile) {
+    parts.push(`tile ${formatTile(decision.moveToTile)}`);
+  }
+  return parts.join(' | ');
 }
 
 function clusterCenter(points: { x: number; y: number }[]): { x: number; y: number } | undefined {
