@@ -17,7 +17,8 @@ export function buildContextPrompt(
   positionMenu: TacticalPositionMenuResult,
   vocabulary: BattleVocabulary,
   playerMessage?: string,
-  terrainDescription?: string
+  terrainDescription?: string,
+  options: { openingStrategy?: boolean } = {}
 ): string {
   const parsedDirective = playerMessage
     ? interpretPlayerMessage(summary, playerMessage, terrainDescription)
@@ -52,6 +53,13 @@ GROUP STATUS:
 ${groupSection}
 
 ${formatPositionMenuForPrompt(positionMenu)}`;
+
+  if (options.openingStrategy) {
+    prompt += `\n\nOPENING STRATEGY PRIORITY:
+This is the first battle plan before combat begins.
+Spend extra care on terrain, first contact, group spacing, target priority, and whether the opening should hold, advance, screen, or focus.
+Prefer one coherent opener over a reactive or generic move.`;
+  }
 
   if (damageSection) {
     prompt += `\n\nRECENT DAMAGE: ${damageSection}`;
@@ -88,6 +96,7 @@ ${formatPositionMenuForPrompt(positionMenu)}`;
   }
 
   prompt += '\n\nGROUP ORDER RULE: If warriors, ranged units, and hero should do different things, include groupOrders. Use the archers group for ranged units in JSON. If groupOrders is empty, chatResponse must describe one army-wide plan only.';
+  prompt += '\nchatResponse must be a non-empty spoken order.';
   prompt += '\nPLAYER ORDER FALLBACK RULE: chatResponse must describe the top-level tactical decision only. Use playerOrderInterpretation only as an optional structured translation of PLAYER SAYS.';
 
   return prompt;

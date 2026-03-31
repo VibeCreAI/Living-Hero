@@ -30,6 +30,10 @@ export function BattleHUD() {
         messageIdRef.current = 0;
       }
 
+      const waitingForStrategy = state.mode === 'battle' && state.phase === 'starting';
+      const inPlanner = state.mode === 'battle' && state.phase === 'init';
+      setBattleStartPending(waitingForStrategy);
+      setPlanningOverlayVisible(inPlanner);
       setBattleState(state);
       setActiveHeroId((current) => {
         if (current && state.heroes.some((hero) => hero.id === current)) {
@@ -112,6 +116,7 @@ export function BattleHUD() {
   const timeSec = battleState?.timeSec ?? 0;
   const isPlayground = battleState?.mode === 'playground';
   const isPlanning = battleState?.mode === 'battle' && battleState.phase === 'init';
+  const isStrategyLoading = battleState?.mode === 'battle' && battleState.phase === 'starting';
   const battleTitle =
     isPlayground
       ? 'PLAYGROUND'
@@ -128,9 +133,19 @@ export function BattleHUD() {
   const hasSplitPlan = Boolean(currentDecision?.groupOrders?.length);
 
   useEffect(() => {
-    setPlanningOverlayVisible(isPlanning);
+    if (isPlanning) {
+      setPlanningOverlayVisible(true);
+      setBattleStartPending(false);
+      return;
+    }
+
+    if (isStrategyLoading) {
+      setPlanningOverlayVisible(false);
+      return;
+    }
+
     setBattleStartPending(false);
-  }, [isPlanning]);
+  }, [isPlanning, isStrategyLoading]);
 
   const leavePlayground = () => {
     EventBus.emit('playground-exit-requested');
@@ -325,8 +340,8 @@ export function BattleHUD() {
           activeHeroId={activeHero?.id ?? null}
           onActiveHeroChange={setActiveHeroId}
           onSend={handleSend}
-          disabled={isPlanning}
-          disabledNote="Battle comms unlock after you press Start Battle."
+          disabled={isPlanning || isStrategyLoading}
+          disabledNote="Battle comms unlock after combat begins."
           placeholder="Available after Start Battle..."
         />
       </div>
@@ -456,6 +471,49 @@ export function BattleHUD() {
             </div>
           )}
         </>
+      )}
+
+      {(battleStartPending || isStrategyLoading) && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: '1024px',
+            height: '768px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'auto',
+            backgroundColor: 'rgba(10, 8, 6, 0.48)',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(420px, calc(100% - 48px))',
+              padding: '16px',
+              borderRadius: '10px',
+              border: '1px solid #5b3f1f',
+              backgroundColor: '#120d09f0',
+              boxShadow: '0 16px 36px rgba(0,0,0,0.38)',
+              color: '#eadfc7',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ color: '#ffd700', fontSize: '17px' }}>Loading Strategy...</div>
+            <div style={{ color: '#d7c79e', fontSize: '13px', lineHeight: 1.5 }}>
+              The commander is finalizing the opening plan. Battle starts automatically when the first strategy is ready.
+            </div>
+            <div style={{ color: '#9f957e', fontSize: '12px' }}>
+              {currentDecision
+                ? `Current draft: ${formatPlan(currentDecision)}`
+                : 'Waiting for the first opening order...'}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

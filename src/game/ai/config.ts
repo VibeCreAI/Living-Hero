@@ -5,6 +5,9 @@ export const OLLAMA_CONFIG = {
   maxTokens: 150,
   temperature: 0.7,
   timeoutMs: 3000,
+  openingMaxTokens: 320,
+  openingTemperature: 0.45,
+  openingTimeoutMs: 8000,
   healthCheckIntervalMs: 10000,
 };
 

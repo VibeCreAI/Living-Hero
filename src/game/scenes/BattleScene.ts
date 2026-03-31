@@ -31,6 +31,7 @@ interface BattleSceneData {
 export class BattleScene extends Scene {
   private battleLoop!: BattleLoop;
   private battleResult: BattleResult = null;
+  private battleStarted = false;
   private sceneData: BattleSceneData = { nodeId: '', difficulty: 1, mode: 'battle' };
   private escapeKey!: Phaser.Input.Keyboard.Key;
   private playerChatHandler?: (message: PlayerChatMessageEvent) => void;
@@ -48,6 +49,7 @@ export class BattleScene extends Scene {
   init(data: BattleSceneData): void {
     this.sceneData = { ...data, mode: data.mode ?? 'battle' };
     this.battleResult = null;
+    this.battleStarted = false;
   }
 
   create(): void {
@@ -112,7 +114,7 @@ export class BattleScene extends Scene {
       }
 
       this.battleLoop.startBattle();
-      EventBus.emit('battle-started', this.battleLoop.getState());
+      EventBus.emit('battle-state-update', this.battleLoop.getState());
     };
     EventBus.on('battle-start-requested', this.battleStartHandler);
 
@@ -165,14 +167,19 @@ export class BattleScene extends Scene {
     }
 
     const result = this.battleLoop.update(dt);
-    EventBus.emit('battle-state-update', this.battleLoop.getState());
+    const state = this.battleLoop.getState();
+    EventBus.emit('battle-state-update', state);
+
+    if (this.sceneData.mode === 'battle' && !this.battleStarted && state.phase === 'active') {
+      this.battleStarted = true;
+      EventBus.emit('battle-started', state);
+    }
 
     if (!result) {
       return;
     }
 
     this.battleResult = result;
-    const state = this.battleLoop.getState();
     const nextFloor = this.sceneData.floorNumber
       ? getNextPortalFloor(this.sceneData.floorNumber)
       : null;

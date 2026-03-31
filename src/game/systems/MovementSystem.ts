@@ -18,6 +18,7 @@ const ENGAGE_LINE_OF_SIGHT_PADDING = 6;
 const ORDER_DESTINATION_HYSTERESIS_TILES = 1.5;
 const ORDER_RESERVATION_HORIZON_STEPS = 3;
 const ORDER_DETOUR_WAIT_RADIUS_TILES = 4;
+const ADVANCE_MOVING_STEP_OUT_TILES = 1;
 const ADVANCE_AUTO_ENGAGE_STEP_OUT_TILES = 3;
 const ADVANCE_AUTO_ENGAGE_COMMIT_SEC = 0.75;
 
@@ -180,6 +181,21 @@ export class MovementSystem {
 
     if (unit.state.orderMode === 'advance' && !this.hasCombatPriority(unit)) {
       if (!this.hasReachedAdvanceAnchor(unit)) {
+        if (this.canEngageTarget(unit, target)) {
+          return null;
+        }
+
+        const movingEngagementTile = this.findBestEngagementTile(unit, target, occupiedTiles, (tile) =>
+          this.canAdvanceMovingStepOut(unit.state.tile, tile)
+        );
+        if (movingEngagementTile) {
+          this.beginAdvanceAutoEngage(unit, target.id);
+          return {
+            tile: movingEngagementTile,
+            key: `engage:${target.id}:${this.battleGrid.tileKey(movingEngagementTile)}`,
+          };
+        }
+
         unit.state.targetId = undefined;
         return fallbackOrderTile
           ? { tile: fallbackOrderTile, key: `order:${this.battleGrid.tileKey(fallbackOrderTile)}` }
@@ -190,12 +206,12 @@ export class MovementSystem {
         return null;
       }
 
-      const anchoredEngagementTile = this.findBestEngagementTile(unit, target, occupiedTiles);
-      if (
-        fallbackOrderTile &&
-        anchoredEngagementTile &&
-        this.canAdvanceAnchorStepOut(fallbackOrderTile, anchoredEngagementTile)
-      ) {
+      const anchoredEngagementTile = fallbackOrderTile
+        ? this.findBestEngagementTile(unit, target, occupiedTiles, (tile) =>
+            this.canAdvanceAnchorStepOut(fallbackOrderTile, tile)
+          )
+        : null;
+      if (anchoredEngagementTile) {
         this.beginAdvanceAutoEngage(unit, target.id);
         return {
           tile: anchoredEngagementTile,
@@ -203,6 +219,29 @@ export class MovementSystem {
         };
       }
 
+      return fallbackOrderTile
+        ? { tile: fallbackOrderTile, key: `order:${this.battleGrid.tileKey(fallbackOrderTile)}` }
+        : null;
+    }
+
+    if (unit.state.orderMode === 'hold') {
+      if (this.canEngageTarget(unit, target)) {
+        return null;
+      }
+
+      const holdEngagementTile = fallbackOrderTile
+        ? this.findBestEngagementTile(unit, target, occupiedTiles, (tile) =>
+            this.isWithinHoldCounterEnvelope(unit, fallbackOrderTile, tile)
+          )
+        : null;
+      if (holdEngagementTile) {
+        return {
+          tile: holdEngagementTile,
+          key: `engage:${target.id}:${this.battleGrid.tileKey(holdEngagementTile)}`,
+        };
+      }
+
+      unit.state.targetId = undefined;
       return fallbackOrderTile
         ? { tile: fallbackOrderTile, key: `order:${this.battleGrid.tileKey(fallbackOrderTile)}` }
         : null;
@@ -538,7 +577,8 @@ export class MovementSystem {
   private findBestEngagementTile(
     unit: Unit,
     target: Unit,
-    occupiedTiles: Map<string, string>
+    occupiedTiles: Map<string, string>,
+    tileFilter?: (tile: TileCoord) => boolean
   ): TileCoord | null {
     if (!this.battleGrid) {
       return null;
@@ -554,6 +594,10 @@ export class MovementSystem {
         }
 
         if (!this.battleGrid.isWithinAttackRange(tile, target.state.tile, rangeTiles)) {
+          continue;
+        }
+
+        if (tileFilter && !tileFilter(tile)) {
           continue;
         }
 
@@ -690,6 +734,29 @@ export class MovementSystem {
     return (
       this.battleGrid.distance(anchorTile, engagementTile) <= ADVANCE_AUTO_ENGAGE_STEP_OUT_TILES
     );
+  }
+
+  private canAdvanceMovingStepOut(originTile: TileCoord, engagementTile: TileCoord): boolean {
+    if (!this.battleGrid) {
+      return false;
+    }
+
+    return (
+      this.battleGrid.distance(originTile, engagementTile) <= ADVANCE_MOVING_STEP_OUT_TILES
+    );
+  }
+
+  private isWithinHoldCounterEnvelope(
+    unit: Unit,
+    anchorTile: TileCoord,
+    engagementTile: TileCoord
+  ): boolean {
+    if (!this.battleGrid) {
+      return false;
+    }
+
+    const leashTiles = unit.state.orderLeashTiles ?? unit.state.orderRadiusTiles ?? 0;
+    return this.battleGrid.distance(anchorTile, engagementTile) <= leashTiles;
   }
 
   private beginAdvanceAutoEngage(unit: Unit, targetId: string): void {

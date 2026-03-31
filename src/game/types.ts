@@ -219,7 +219,7 @@ export interface HeroSummary {
 
 // Battle types
 export type BattleMode = 'battle' | 'playground';
-export type BattlePhase = 'init' | 'active' | 'ended';
+export type BattlePhase = 'init' | 'starting' | 'active' | 'ended';
 
 export interface BattleState {
   sessionId: string;

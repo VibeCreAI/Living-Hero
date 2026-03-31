@@ -28,6 +28,7 @@ export class HeroScheduler {
   /** Track last known state for event-driven recheck triggers */
   private lastEnemyCount: Map<string, number> = new Map();
   private lastAllyMinHpPct: Map<string, number> = new Map();
+  private initialStrategyReady: Set<string> = new Set();
 
   constructor(
     decisionProvider: IHeroDecisionProvider,
@@ -54,7 +55,12 @@ export class HeroScheduler {
     for (const heroId of targetHeroIds) {
       this.pendingDirectives.set(heroId, directive);
       this.timers.set(heroId, Infinity);
+      this.initialStrategyReady.delete(heroId);
     }
+  }
+
+  haveInitialStrategies(heroes: Hero[]): boolean {
+    return heroes.length > 0 && heroes.every((hero) => this.initialStrategyReady.has(hero.state.id));
   }
 
   setTerrainDescription(description: string): void {
@@ -77,10 +83,15 @@ export class HeroScheduler {
         this.baseDecisions.delete(heroId);
         this.queuedResults.delete(heroId);
         this.reactiveLocks.delete(heroId);
+        this.initialStrategyReady.delete(heroId);
       }
 
       const summary = buildHeroSummary(hero.state, battleState);
       const activeDirective = incomingDirective ?? summary.currentDirective;
+      const waitingForInitialStrategy =
+        battleState.phase === 'starting' &&
+        this.ollamaBrain !== null &&
+        !this.initialStrategyReady.has(heroId);
       const parsedDirective = activeDirective
         ? interpretPlayerMessage(summary, activeDirective, this.terrainDescription)
         : null;
@@ -133,7 +144,13 @@ export class HeroScheduler {
           parsedDirective
         );
         this.baseDecisions.set(heroId, structuredDecision);
-        queuedChatResponse = resolvedQueuedDecision.chatResponse;
+        if (this.shouldAcceptInitialStrategy(queuedResult, resolvedQueuedDecision.chatResponse)) {
+          this.initialStrategyReady.add(heroId);
+        }
+        queuedChatResponse =
+          waitingForInitialStrategy && queuedResult.source !== 'llm'
+            ? undefined
+            : resolvedQueuedDecision.chatResponse;
         this.timers.set(heroId, 0);
       }
 
@@ -168,7 +185,7 @@ export class HeroScheduler {
       const recheckInterval = hero.state.currentDecision?.recheckInSec ?? 0;
       const eventTriggered = this.checkEventTriggers(heroId, summary);
 
-      if (!incomingDirective && !eventTriggered && elapsed < recheckInterval) {
+      if (!waitingForInitialStrategy && !incomingDirective && !eventTriggered && elapsed < recheckInterval) {
         this.timers.set(heroId, elapsed);
         continue;
       }
@@ -183,7 +200,9 @@ export class HeroScheduler {
         const announceDirectiveInterpretation = Boolean(incomingDirective && !parsedDirective);
 
         this.ollamaBrain
-          .decideAsync(summary, directive, this.terrainDescription)
+          .decideAsync(summary, directive, this.terrainDescription, {
+            openingStrategy: waitingForInitialStrategy,
+          })
           .then((result) => {
             if (this.requestVersions.get(heroId) !== requestVersion) {
               return;
@@ -193,6 +212,7 @@ export class HeroScheduler {
               chatResponse: result.chatResponse,
               playerOrderInterpretation: result.playerOrderInterpretation,
               announceDirectiveInterpretation,
+              source: result.source,
             });
           })
           .catch(() => {
@@ -204,7 +224,11 @@ export class HeroScheduler {
               ? interpretPlayerMessage(liveSummary, directive, this.terrainDescription)
                 ?? this.decisionProvider.decide(liveSummary)
               : this.decisionProvider.decide(liveSummary);
-            this.queuedResults.set(heroId, { decision: fallback });
+            this.queuedResults.set(heroId, {
+              decision: fallback,
+              chatResponse: this.buildFallbackAck(fallback),
+              source: 'fallback',
+            });
           })
           .finally(() => {
             if (this.requestVersions.get(heroId) !== requestVersion) {
@@ -227,6 +251,7 @@ export class HeroScheduler {
           adaptReactiveDecision(summary, structuredDecision)
         );
         this.baseDecisions.set(heroId, structuredDecision);
+        this.initialStrategyReady.add(heroId);
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
         if (incomingDirective && parsedDirective) {
@@ -603,6 +628,17 @@ export class HeroScheduler {
         : undefined,
     };
   }
+
+  private shouldAcceptInitialStrategy(
+    queuedResult: QueuedDecisionResult,
+    chatResponse: string | undefined
+  ): boolean {
+    if (!this.ollamaBrain) {
+      return true;
+    }
+
+    return queuedResult.source === 'llm' && Boolean(chatResponse?.trim());
+  }
 }
 
 interface QueuedDecisionResult {
@@ -610,6 +646,7 @@ interface QueuedDecisionResult {
   chatResponse?: string;
   playerOrderInterpretation?: HeroDecision;
   announceDirectiveInterpretation?: boolean;
+  source?: 'llm' | 'fallback';
 }
 
 interface ResolvedQueuedDecision {

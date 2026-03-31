@@ -6,6 +6,7 @@ import { ObstacleSystem } from './Obstacles';
 const HOLD_ENGAGE_BUFFER_TILES = 1;
 const ROLE_PREFERENCE_BONUS = 3;
 const ENGAGE_LINE_OF_SIGHT_PADDING = 6;
+const ADVANCE_MOVING_STEP_OUT_TILES = 1;
 const ADVANCE_AUTO_ENGAGE_STEP_OUT_TILES = 3;
 
 export class TargetingSystem {
@@ -104,10 +105,7 @@ export class TargetingSystem {
     if (orderMode === 'hold') {
       return this.findBestTarget(unit, opponents, (opponent) => {
         const withinWeaponReach = this.isWithinAttackReach(unit, opponent, HOLD_ENGAGE_BUFFER_TILES);
-        const withinHoldZone = orderTile
-          ? this.distance(orderTile, opponent.state.tile) <= orderRadiusTiles
-          : false;
-        return withinWeaponReach || withinHoldZone;
+        return withinWeaponReach || this.isWithinHoldCounterZone(unit, opponent);
       });
     }
 
@@ -126,12 +124,9 @@ export class TargetingSystem {
 
     if (orderMode === 'advance') {
       if (!this.hasCombatPriority(unit)) {
-        if (!this.hasReachedAdvanceAnchor(unit)) {
-          return undefined;
-        }
-
         return this.findBestTarget(unit, opponents, (opponent) =>
-          this.canAdvanceAnchorAutoEngage(unit, opponent)
+          this.canAdvanceImmediateOpportunity(unit, opponent) ||
+          (this.hasReachedAdvanceAnchor(unit) && this.canAdvanceAnchorAutoEngage(unit, opponent))
         );
       }
 
@@ -178,7 +173,7 @@ export class TargetingSystem {
     if (orderMode === 'hold') {
       return (
         this.isWithinAttackReach(unit, target, HOLD_ENGAGE_BUFFER_TILES) ||
-        (orderTile ? this.distance(orderTile, target.state.tile) <= orderRadiusTiles : false)
+        this.isWithinHoldCounterZone(unit, target)
       );
     }
 
@@ -194,7 +189,10 @@ export class TargetingSystem {
 
     if (orderMode === 'advance') {
       if (!this.hasCombatPriority(unit)) {
-        return this.hasReachedAdvanceAnchor(unit) && this.canAdvanceAnchorAutoEngage(unit, target);
+        return (
+          this.canAdvanceImmediateOpportunity(unit, target) ||
+          (this.hasReachedAdvanceAnchor(unit) && this.canAdvanceAnchorAutoEngage(unit, target))
+        );
       }
 
       return (
@@ -366,6 +364,34 @@ export class TargetingSystem {
     const anchorAttackReach =
       this.attackRangeTiles(unit) + ADVANCE_AUTO_ENGAGE_STEP_OUT_TILES;
     return this.battleGrid.isWithinAttackRange(anchorTile, target.state.tile, anchorAttackReach);
+  }
+
+  private canAdvanceImmediateOpportunity(unit: Unit, target: Unit): boolean {
+    if (!this.battleGrid || unit.state.orderMode !== 'advance') {
+      return false;
+    }
+
+    if (!this.isWithinPursuitEnvelope(unit, target)) {
+      return false;
+    }
+
+    if (this.isOpportunityTarget(unit, target)) {
+      return true;
+    }
+
+    const movingAttackReach =
+      this.attackRangeTiles(unit) + ADVANCE_MOVING_STEP_OUT_TILES;
+    return this.battleGrid.isWithinAttackRange(unit.state.tile, target.state.tile, movingAttackReach);
+  }
+
+  private isWithinHoldCounterZone(unit: Unit, target: Unit): boolean {
+    const orderTile = unit.state.orderTile;
+    if (!orderTile) {
+      return false;
+    }
+
+    const counterRadiusTiles = unit.state.orderLeashTiles ?? unit.state.orderRadiusTiles ?? 0;
+    return this.distance(orderTile, target.state.tile) <= counterRadiusTiles;
   }
 
   private isOpportunityTarget(unit: Unit, target: Unit): boolean {

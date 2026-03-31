@@ -33,6 +33,12 @@ export interface LLMResponse {
   raw: LLMRawDecision;
 }
 
+export interface LLMRequestOptions {
+  maxTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+}
+
 const GROUP_ORDER_SCHEMA = {
   type: 'array',
   items: {
@@ -91,7 +97,7 @@ const OPTIONAL_PLAYER_ORDER_SCHEMA = {
 const DECISION_SCHEMA = {
   type: 'object',
   properties: {
-    chatResponse: { type: 'string' },
+    chatResponse: { type: 'string', minLength: 1 },
     ...DECISION_PLAN_PROPERTIES,
     playerOrderInterpretation: OPTIONAL_PLAYER_ORDER_SCHEMA,
   },
@@ -140,9 +146,11 @@ export class LLMClient {
 
   async chat(
     messages: ChatMessage[],
-    maxTokens: number = OLLAMA_CONFIG.maxTokens,
-    temperature: number = OLLAMA_CONFIG.temperature
+    options: LLMRequestOptions = {}
   ): Promise<LLMResponse> {
+    const maxTokens = options.maxTokens ?? OLLAMA_CONFIG.maxTokens;
+    const temperature = options.temperature ?? OLLAMA_CONFIG.temperature;
+    const timeoutMs = options.timeoutMs ?? OLLAMA_CONFIG.timeoutMs;
     const body = {
       model: this.model,
       messages,
@@ -158,7 +166,7 @@ export class LLMClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(OLLAMA_CONFIG.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!resp.ok) {

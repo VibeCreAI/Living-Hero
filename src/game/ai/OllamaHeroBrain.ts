@@ -23,6 +23,7 @@ export interface OllamaDecisionResult {
   chatResponse: string;
   positionMenu: TacticalPositionMenuResult;
   vocabulary: BattleVocabulary;
+  source: 'llm' | 'fallback';
 }
 
 const FALLBACK_DECISION: HeroDecision = {
@@ -58,7 +59,8 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
   async decideAsync(
     summary: HeroSummary,
     playerMessage?: string,
-    terrainDescription?: string
+    terrainDescription?: string,
+    options: { openingStrategy?: boolean } = {}
   ): Promise<OllamaDecisionResult> {
     if (this.pending) {
       return {
@@ -66,6 +68,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         chatResponse: '',
         positionMenu: buildTacticalPositionMenu(summary),
         vocabulary: this.vocabulary,
+        source: 'fallback',
       };
     }
 
@@ -84,7 +87,8 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         positionMenu,
         this.vocabulary,
         playerMessage,
-        terrainDescription
+        terrainDescription,
+        options
       );
 
       const messages: ChatMessage[] = [
@@ -92,8 +96,16 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         { role: 'user', content: contextPrompt },
       ];
 
+      const requestOptions = options.openingStrategy
+        ? {
+            maxTokens: OLLAMA_CONFIG.openingMaxTokens,
+            temperature: OLLAMA_CONFIG.openingTemperature,
+            timeoutMs: OLLAMA_CONFIG.openingTimeoutMs,
+          }
+        : undefined;
+
       const start = performance.now();
-      const response = await this.client.chat(messages);
+      const response = await this.client.chat(messages, requestOptions);
       this.lastLatencyMs = performance.now() - start;
       this.llmCallCount++;
       const decision = this.resolveRawDecision(response.raw, summary, positionMenu, 'llm');
@@ -112,14 +124,17 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         chatResponse: this.normalizeChatResponse(response.chatResponse, decision),
         positionMenu,
         vocabulary: this.vocabulary,
+        source: 'llm',
       };
     } catch {
       this.fallbackCount++;
+      const fallbackDecision = this.fallback.decide(summary);
       return {
-        decision: this.fallback.decide(summary),
-        chatResponse: '',
+        decision: fallbackDecision,
+        chatResponse: this.buildFallbackChatResponse(fallbackDecision),
         positionMenu: buildTacticalPositionMenu(summary),
         vocabulary: this.vocabulary,
+        source: 'fallback',
       };
     } finally {
       this.pending = false;
@@ -213,14 +228,14 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
   private normalizeChatResponse(chatResponse: string, decision: HeroDecision): string {
     const trimmed = chatResponse.trim();
     if (!trimmed) {
-      return trimmed;
+      return this.buildFallbackChatResponse(decision);
     }
 
     if (decision.groupOrders?.length || !this.mentionsSplitGroups(trimmed)) {
       return trimmed;
     }
 
-    return this.buildArmyOnlyAck(decision);
+    return this.buildFallbackChatResponse(decision);
   }
 
   private mentionsSplitGroups(chatResponse: string): boolean {
@@ -251,6 +266,62 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         return 'Hold together and wait for the opening.';
       case 'use_skill':
         return 'Stay with me and press the action.';
+    }
+  }
+
+  private buildFallbackChatResponse(decision: HeroDecision): string {
+    if (decision.groupOrders?.length) {
+      return this.buildGroupOrdersAck(decision.groupOrders);
+    }
+
+    return this.buildArmyOnlyAck(decision);
+  }
+
+  private buildGroupOrdersAck(groupOrders: GroupOrder[]): string {
+    const armyOrder = groupOrders.find((groupOrder) => groupOrder.group === 'all');
+    if (armyOrder) {
+      return this.buildArmyOnlyAck({
+        intent: armyOrder.intent,
+        targetId: armyOrder.targetId,
+        moveToTile: armyOrder.moveToTile,
+        priority: 'medium',
+        rationaleTag: 'fallback_group_all',
+        recheckInSec: 2,
+      });
+    }
+
+    const priority: UnitGroup[] = ['hero', 'warriors', 'archers'];
+    const clauses = priority
+      .map((group) => groupOrders.find((groupOrder) => groupOrder.group === group))
+      .filter((groupOrder): groupOrder is GroupOrder => Boolean(groupOrder))
+      .map((groupOrder) => this.describeGroupOrder(groupOrder));
+
+    return clauses.join(' ');
+  }
+
+  private describeGroupOrder(groupOrder: GroupOrder): string {
+    const label = groupOrder.group === 'archers'
+      ? 'Ranged'
+      : groupOrder.group === 'hero'
+        ? 'I'
+        : 'Warriors';
+    const targetName = groupOrder.targetId
+      ? this.vocabulary.getNickname(groupOrder.targetId)
+      : undefined;
+
+    switch (groupOrder.intent) {
+      case 'focus_enemy':
+        return targetName ? `${label} focus ${targetName}.` : `${label} focus the marked enemy.`;
+      case 'protect_target':
+        return targetName ? `${label} guard ${targetName}.` : `${label} guard the line.`;
+      case 'advance_to_point':
+        return `${label} advance to the marked position.`;
+      case 'retreat_to_point':
+        return `${label} fall back to the marked position.`;
+      case 'hold_position':
+        return `${label} hold this ground.`;
+      case 'use_skill':
+        return `${label} strike on my signal.`;
     }
   }
 }

@@ -23,6 +23,7 @@ YOUR JOB:
 8. If PLAYER SAYS exists and the report says the rule parser failed, you may fill playerOrderInterpretation with a structured translation of that player order.
 9. Only fill playerOrderInterpretation when the player's order is clear enough to execute with known groups, nicknames, or position letters. Otherwise omit it.
 10. chatResponse: speak as ${hero.name} IN CHARACTER. Be fierce, tactical, and brief (1 sentence). Never say generic things like "Engaging" - describe YOUR top-level plan, not playerOrderInterpretation.
+11. chatResponse must never be empty.
 
 INTENTS: hold_position, advance_to_point, protect_target, focus_enemy, retreat_to_point, use_skill
 GROUPS: hero, warriors, archers (archers = ranged units)

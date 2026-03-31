@@ -132,9 +132,15 @@ export class BattleLoop {
       return;
     }
 
-    if (this.stateManager.getState().phase === 'init') {
+    if (this.heroScheduler.haveInitialStrategies(this.heroes)) {
       this.stateManager.setPhase('active');
       this.planningRequested = false;
+      return;
+    }
+
+    if (this.stateManager.getState().phase === 'init') {
+      this.stateManager.setPhase('starting');
+      this.planningRequested = true;
     }
   }
 
@@ -206,6 +212,19 @@ export class BattleLoop {
 
       this.syncVisuals();
       this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
+      return null;
+    }
+
+    if (state.phase === 'starting') {
+      this.heroScheduler.update(dt, this.heroes, state, this.alliedUnits, this.enemyUnits);
+      this.syncVisuals();
+      this.feedbackOverlay?.update(this.heroes, this.alliedUnits, this.enemyUnits);
+
+      if (this.heroScheduler.haveInitialStrategies(this.heroes)) {
+        this.stateManager.setPhase('active');
+        this.planningRequested = false;
+      }
+
       return null;
     }
 
