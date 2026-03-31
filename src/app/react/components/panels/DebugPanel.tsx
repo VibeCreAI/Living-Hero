@@ -54,8 +54,8 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
         enemyCount: state.enemyUnits.filter((u) => u.state !== 'dead').length,
         timeSec: state.timeSec,
         targetId: decision?.targetId ?? 'none',
-        moveTo: decision?.moveTo
-          ? `(${Math.round(decision.moveTo.x)}, ${Math.round(decision.moveTo.y)})`
+        moveTo: decision?.moveToTile
+          ? `[${decision.moveToTile.col}, ${decision.moveToTile.row}]`
           : 'none',
         armyPlan: formatArmyPlan(decision),
         heroPlan: formatGroupPlan(decision, 'hero'),
@@ -181,12 +181,12 @@ function formatArmyPlan(decision?: HeroDecision): string {
   if (decision.groupOrderMode === 'explicit_only' && decision.groupOrders?.length) {
     const allGroupOrder = decision.groupOrders.find((groupOrder) => groupOrder.group === 'all');
     if (allGroupOrder) {
-      return formatPlan(allGroupOrder.intent, allGroupOrder.targetId, allGroupOrder.moveTo);
+      return formatPlan(allGroupOrder.intent, allGroupOrder.targetId, allGroupOrder.moveToTile);
     }
     return 'unchanged';
   }
 
-  return formatPlan(decision.intent, decision.targetId, decision.moveTo);
+  return formatPlan(decision.intent, decision.targetId, decision.moveToTile);
 }
 
 function formatGroupPlan(decision: HeroDecision | undefined, group: UnitGroup): string {
@@ -199,20 +199,20 @@ function formatGroupPlan(decision: HeroDecision | undefined, group: UnitGroup): 
 }
 
 function formatGroupOrder(groupOrder: GroupOrder): string {
-  return formatPlan(groupOrder.intent, groupOrder.targetId, groupOrder.moveTo);
+  return formatPlan(groupOrder.intent, groupOrder.targetId, groupOrder.moveToTile);
 }
 
 function formatPlan(
   intent: string,
   targetId?: string,
-  moveTo?: { x: number; y: number }
+  moveToTile?: { col: number; row: number }
 ): string {
   const parts = [intent];
   if (targetId) {
     parts.push(targetId);
   }
-  if (moveTo) {
-    parts.push(`(${Math.round(moveTo.x)},${Math.round(moveTo.y)})`);
+  if (moveToTile) {
+    parts.push(`[${moveToTile.col},${moveToTile.row}]`);
   }
   return parts.join(' / ');
 }

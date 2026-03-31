@@ -1,5 +1,5 @@
 import { Scene } from 'phaser';
-import { UnitState, UnitFaction, UnitRole, UnitAnimState, Position } from '../types';
+import { UnitState, UnitFaction, UnitRole, UnitAnimState, Position, TileCoord } from '../types';
 import { UNIT_CONFIGS } from '../data/units';
 import { EventBus } from '../EventBus';
 
@@ -28,6 +28,7 @@ interface UnitOptions {
 export function createUnitState(
   faction: UnitFaction,
   role: UnitRole,
+  tile: TileCoord,
   position: Position,
   overrides: Partial<UnitState> = {}
 ): UnitState {
@@ -36,6 +37,7 @@ export function createUnitState(
     id: `unit-${faction}-${role}-${unitIdCounter++}`,
     faction,
     role,
+    tile: { ...tile },
     position: { ...position },
     hp: config.hp,
     maxHp: config.hp,
@@ -49,6 +51,7 @@ export function createUnitState(
   return {
     ...baseState,
     ...overrides,
+    tile: { ...tile, ...(overrides.tile ?? {}) },
     position: { ...position, ...(overrides.position ?? {}) },
     state: 'idle',
   };
@@ -205,6 +208,12 @@ export class Unit {
 
     this.sprite.setPosition(this.state.position.x, this.state.position.y);
     this.setAnimState('moving');
+  }
+
+  setTilePosition(tile: TileCoord, position: Position): void {
+    this.state.tile = { ...tile };
+    this.state.position = { ...position };
+    this.sprite.setPosition(position.x, position.y);
   }
 
   updateFacingFromDelta(deltaX: number): void {

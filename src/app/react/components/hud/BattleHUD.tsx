@@ -490,8 +490,11 @@ function formatIntentLabel(decision: HeroDecision | undefined): string {
 
 function formatPlan(
   decision:
-    | Pick<HeroDecision, 'intent' | 'targetId' | 'moveTo' | 'groupOrders' | 'groupOrderMode'>
-    | Pick<{ group: UnitGroup; intent: HeroDecision['intent']; targetId?: string; moveTo?: { x: number; y: number } }, 'group' | 'intent' | 'targetId' | 'moveTo'>
+    | Pick<HeroDecision, 'intent' | 'targetId' | 'moveToTile' | 'groupOrders' | 'groupOrderMode'>
+    | Pick<
+        { group: UnitGroup; intent: HeroDecision['intent']; targetId?: string; moveToTile?: { col: number; row: number } },
+        'group' | 'intent' | 'targetId' | 'moveToTile'
+      >
     | undefined
 ): string {
   if (!decision) {
@@ -502,7 +505,7 @@ function formatPlan(
     return formatPlan({
       intent: decision.intent,
       targetId: decision.targetId,
-      moveTo: decision.moveTo,
+      moveToTile: decision.moveToTile,
     });
   }
 
@@ -522,8 +525,8 @@ function formatPlan(
   if (decision.targetId) {
     parts.push(`-> ${decision.targetId}`);
   }
-  if (decision.moveTo) {
-    parts.push(`@ (${Math.round(decision.moveTo.x)}, ${Math.round(decision.moveTo.y)})`);
+  if (decision.moveToTile) {
+    parts.push(`@ [${decision.moveToTile.col}, ${decision.moveToTile.row}]`);
   }
 
   return parts.join(' ');

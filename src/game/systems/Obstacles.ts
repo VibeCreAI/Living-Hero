@@ -1,5 +1,4 @@
 import { Scene } from 'phaser';
-import NavMesh, { buildPolysFromGridMap } from 'navmesh';
 import { BattleObstacle, Position } from '../types';
 
 export type Obstacle = BattleObstacle;
@@ -8,55 +7,13 @@ export interface ObstacleInitOptions {
   layout?: Obstacle[];
   layoutIndex?: number;
   showLabels?: boolean;
+  worldWidth?: number;
+  worldHeight?: number;
 }
 
 export const OBSTACLE_CLEARANCE = 10;
 
-interface GridCell {
-  col: number;
-  row: number;
-}
-
-class MeshPoint {
-  constructor(
-    public x: number,
-    public y: number
-  ) {}
-
-  equals(point: { x: number; y: number }): boolean {
-    return this.x === point.x && this.y === point.y;
-  }
-
-  angle(point: { x: number; y: number }): number {
-    return Math.atan2(point.y - this.y, point.x - this.x);
-  }
-
-  distance(point: { x: number; y: number }): number {
-    return Math.hypot(point.x - this.x, point.y - this.y);
-  }
-
-  add(point: { x: number; y: number }): void {
-    this.x += point.x;
-    this.y += point.y;
-  }
-
-  subtract(point: { x: number; y: number }): void {
-    this.x -= point.x;
-    this.y -= point.y;
-  }
-
-  clone(): MeshPoint {
-    return new MeshPoint(this.x, this.y);
-  }
-}
-
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
-const GRID_SIZE = 16;
-const PATH_PADDING = OBSTACLE_CLEARANCE;
 const SEGMENT_STEP = 8;
-const NAVMESH_PROJECTION_LIMIT = GRID_SIZE * 4;
-const MIN_WAYPOINT_GAP = 4;
 const ROCK_TEXTURES = ['terrain-rock-1', 'terrain-rock-2', 'terrain-rock-3', 'terrain-rock-4'];
 const WALL_TEXTURES = ['terrain-rock-3', 'terrain-rock-4'];
 const WALL_SPACING = 30;
@@ -82,11 +39,9 @@ const LAYOUTS: Obstacle[][] = [
 ];
 
 export class ObstacleSystem {
-  private readonly cols = Math.ceil(MAP_WIDTH / GRID_SIZE);
-  private readonly rows = Math.ceil(MAP_HEIGHT / GRID_SIZE);
+  private worldWidth = 1024;
+  private worldHeight = 768;
   private obstacles: Obstacle[] = [];
-  private blocked: boolean[] = [];
-  private navMesh: NavMesh | null = null;
   private visuals: Phaser.GameObjects.GameObject[] = [];
   private labels: Phaser.GameObjects.Text[] = [];
 
@@ -95,13 +50,15 @@ export class ObstacleSystem {
   }
 
   init(scene: Scene, options: ObstacleInitOptions = {}): void {
+    this.worldWidth = options.worldWidth ?? this.worldWidth;
+    this.worldHeight = options.worldHeight ?? this.worldHeight;
+
     const layout = options.layout
       ? options.layout
       : LAYOUTS[(options.layoutIndex ?? Math.floor(Math.random() * LAYOUTS.length)) % LAYOUTS.length];
 
     this.configureTextureSampling(scene);
     this.obstacles = layout.map((obstacle) => ({ ...obstacle }));
-    this.rebuildGrid();
 
     for (const obstacle of this.obstacles) {
       this.createObstacleVisual(scene, obstacle);
@@ -130,12 +87,12 @@ export class ObstacleSystem {
     }
   }
 
-  isBlocked(pos: Position, padding = PATH_PADDING): boolean {
+  isBlocked(pos: Position, padding = OBSTACLE_CLEARANCE): boolean {
     if (
       pos.x < padding ||
-      pos.x > MAP_WIDTH - padding ||
+      pos.x > this.worldWidth - padding ||
       pos.y < padding ||
-      pos.y > MAP_HEIGHT - padding
+      pos.y > this.worldHeight - padding
     ) {
       return true;
     }
@@ -154,7 +111,7 @@ export class ObstacleSystem {
     return false;
   }
 
-  hasLineOfSight(from: Position, to: Position, padding = PATH_PADDING): boolean {
+  hasLineOfSight(from: Position, to: Position, padding = OBSTACLE_CLEARANCE): boolean {
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
     const steps = Math.max(1, Math.ceil(distance / SEGMENT_STEP));
 
@@ -173,10 +130,10 @@ export class ObstacleSystem {
     return true;
   }
 
-  pushOut(pos: Position, padding = PATH_PADDING): Position {
+  pushOut(pos: Position, padding = OBSTACLE_CLEARANCE): Position {
     const resolved = {
-      x: Phaser.Math.Clamp(pos.x, padding, MAP_WIDTH - padding),
-      y: Phaser.Math.Clamp(pos.y, padding, MAP_HEIGHT - padding),
+      x: Phaser.Math.Clamp(pos.x, padding, this.worldWidth - padding),
+      y: Phaser.Math.Clamp(pos.y, padding, this.worldHeight - padding),
     };
 
     for (let pass = 0; pass < 4; pass++) {
@@ -210,8 +167,8 @@ export class ObstacleSystem {
             resolved.y = bottom + 1;
           }
 
-          resolved.x = Phaser.Math.Clamp(resolved.x, padding, MAP_WIDTH - padding);
-          resolved.y = Phaser.Math.Clamp(resolved.y, padding, MAP_HEIGHT - padding);
+          resolved.x = Phaser.Math.Clamp(resolved.x, padding, this.worldWidth - padding);
+          resolved.y = Phaser.Math.Clamp(resolved.y, padding, this.worldHeight - padding);
           adjusted = true;
         }
       }
@@ -225,33 +182,11 @@ export class ObstacleSystem {
   }
 
   findNearestNavigablePoint(pos: Position): Position {
-    const meshPoint = this.resolveMeshPoint(pos);
-    return meshPoint ?? this.pushOut(pos);
+    return this.pushOut(pos);
   }
 
-  findPath(from: Position, target: Position): Position[] | null {
-    if (this.obstacles.length === 0 || this.hasLineOfSight(from, target)) {
-      return null;
-    }
-
-    if (!this.navMesh) {
-      return null;
-    }
-
-    const start = this.resolveMeshPoint(from);
-    const goal = this.resolveMeshPoint(target);
-
-    if (!start || !goal) {
-      return null;
-    }
-
-    const navPath = this.navMesh.findPath(start, goal);
-    if (!navPath || navPath.length <= 1) {
-      return null;
-    }
-
-    const waypoints = this.normalizeNavPath(navPath, from, target);
-    return waypoints;
+  findPath(_from: Position, _target: Position): Position[] | null {
+    return null;
   }
 
   describe(): string {
@@ -278,64 +213,10 @@ export class ObstacleSystem {
     this.visuals = [];
     this.labels = [];
     this.obstacles = [];
-    this.blocked = [];
-    this.navMesh?.destroy();
-    this.navMesh = null;
-  }
-
-  private rebuildGrid(): void {
-    this.blocked = new Array(this.cols * this.rows).fill(false);
-
-    for (let row = 0; row < this.rows; row++) {
-      for (let col = 0; col < this.cols; col++) {
-        const cellLeft = col * GRID_SIZE;
-        const cellRight = Math.min(MAP_WIDTH, cellLeft + GRID_SIZE);
-        const cellTop = row * GRID_SIZE;
-        const cellBottom = Math.min(MAP_HEIGHT, cellTop + GRID_SIZE);
-
-        const isBlocked = this.obstacles.some((obstacle) => {
-          const left = obstacle.x - PATH_PADDING;
-          const right = obstacle.x + obstacle.width + PATH_PADDING;
-          const top = obstacle.y - PATH_PADDING;
-          const bottom = obstacle.y + obstacle.height + PATH_PADDING;
-
-          return cellLeft < right && cellRight > left && cellTop < bottom && cellBottom > top;
-        });
-
-        this.blocked[this.index(col, row)] = isBlocked;
-      }
-    }
-
-    this.rebuildNavMesh();
-  }
-
-  private rebuildNavMesh(): void {
-    this.navMesh?.destroy();
-
-    const walkableMap: boolean[][] = [];
-    for (let row = 0; row < this.rows; row++) {
-      const walkableRow: boolean[] = [];
-
-      for (let col = 0; col < this.cols; col++) {
-        walkableRow.push(!this.blocked[this.index(col, row)]);
-      }
-
-      walkableMap.push(walkableRow);
-    }
-
-    const meshPolygons = buildPolysFromGridMap(
-      walkableMap,
-      GRID_SIZE,
-      GRID_SIZE,
-      (tile) => tile
-    );
-
-    this.navMesh = meshPolygons.length > 0 ? new NavMesh(meshPolygons) : null;
   }
 
   private createObstacleVisual(scene: Scene, obstacle: Obstacle): void {
-    const isWall = this.isWallObstacle(obstacle);
-    if (isWall) {
+    if (this.isWallObstacle(obstacle)) {
       this.createWallVisual(scene, obstacle);
       return;
     }
@@ -400,143 +281,6 @@ export class ObstacleSystem {
     }
   }
 
-  private resolveMeshPoint(pos: Position): Position | null {
-    if (!this.navMesh) {
-      return null;
-    }
-
-    const origin = this.pushOut(pos);
-    const closest = this.navMesh.findClosestMeshPoint(
-      new MeshPoint(origin.x, origin.y),
-      NAVMESH_PROJECTION_LIMIT
-    );
-    if (closest.point) {
-      return this.clampToBounds(closest.point);
-    }
-
-    const fallback = this.findNearestWalkableCell(this.worldToCell(origin));
-    return fallback ? this.cellToWorld(fallback) : null;
-  }
-
-  private normalizeNavPath(
-    navPath: Array<{ x: number; y: number }>,
-    from: Position,
-    target: Position
-  ): Position[] | null {
-    const waypoints: Position[] = [];
-
-    for (const point of navPath) {
-      const waypoint = this.clampToBounds(point);
-      const anchor = waypoints.length > 0 ? waypoints[waypoints.length - 1] : from;
-
-      if (Math.hypot(anchor.x - waypoint.x, anchor.y - waypoint.y) < MIN_WAYPOINT_GAP) {
-        continue;
-      }
-
-      waypoints.push(waypoint);
-    }
-
-    if (waypoints.length === 0) {
-      return null;
-    }
-
-    const finalWaypoint = waypoints[waypoints.length - 1];
-    if (
-      Math.hypot(finalWaypoint.x - target.x, finalWaypoint.y - target.y) >= MIN_WAYPOINT_GAP &&
-      this.hasLineOfSight(finalWaypoint, target)
-    ) {
-      waypoints.push(this.pushOut(target));
-    }
-
-    return waypoints.length > 0 ? waypoints : null;
-  }
-
-  private findNearestWalkableCell(origin: GridCell): GridCell | null {
-    if (this.isWalkableCell(origin)) {
-      return origin;
-    }
-
-    const maxRadius = Math.max(this.cols, this.rows);
-
-    for (let radius = 1; radius <= maxRadius; radius++) {
-      let best: GridCell | null = null;
-      let bestDistance = Number.POSITIVE_INFINITY;
-
-      for (let row = origin.row - radius; row <= origin.row + radius; row++) {
-        for (let col = origin.col - radius; col <= origin.col + radius; col++) {
-          const onPerimeter =
-            row === origin.row - radius ||
-            row === origin.row + radius ||
-            col === origin.col - radius ||
-            col === origin.col + radius;
-
-          if (!onPerimeter) {
-            continue;
-          }
-
-          const candidate = { col, row };
-          if (!this.isWalkableCell(candidate)) {
-            continue;
-          }
-
-          const distance = this.heuristic(origin, candidate);
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            best = candidate;
-          }
-        }
-      }
-
-      if (best) {
-        return best;
-      }
-    }
-
-    return null;
-  }
-
-  private isWalkableCell(cell: GridCell): boolean {
-    if (
-      cell.col < 0 ||
-      cell.col >= this.cols ||
-      cell.row < 0 ||
-      cell.row >= this.rows
-    ) {
-      return false;
-    }
-
-    return !this.blocked[this.index(cell.col, cell.row)];
-  }
-
-  private worldToCell(pos: Position): GridCell {
-    return {
-      col: Phaser.Math.Clamp(Math.floor(pos.x / GRID_SIZE), 0, this.cols - 1),
-      row: Phaser.Math.Clamp(Math.floor(pos.y / GRID_SIZE), 0, this.rows - 1),
-    };
-  }
-
-  private cellToWorld(cell: GridCell): Position {
-    return {
-      x: Phaser.Math.Clamp(cell.col * GRID_SIZE + GRID_SIZE / 2, PATH_PADDING, MAP_WIDTH - PATH_PADDING),
-      y: Phaser.Math.Clamp(cell.row * GRID_SIZE + GRID_SIZE / 2, PATH_PADDING, MAP_HEIGHT - PATH_PADDING),
-    };
-  }
-
-  private clampToBounds(pos: { x: number; y: number }): Position {
-    return {
-      x: Phaser.Math.Clamp(pos.x, PATH_PADDING, MAP_WIDTH - PATH_PADDING),
-      y: Phaser.Math.Clamp(pos.y, PATH_PADDING, MAP_HEIGHT - PATH_PADDING),
-    };
-  }
-
-  private index(col: number, row: number): number {
-    return row * this.cols + col;
-  }
-
-  private heuristic(a: GridCell, b: GridCell): number {
-    return Math.hypot(a.col - b.col, a.row - b.row);
-  }
-
   private isWallObstacle(obstacle: Obstacle): boolean {
     const label = `${obstacle.label} ${obstacle.id}`.toLowerCase();
     return label.includes('wall');
@@ -547,7 +291,6 @@ export class ObstacleSystem {
     for (let i = 0; i < value.length; i++) {
       hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
     }
-
     return hash;
   }
 }

@@ -1,53 +1,49 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
-import { HeroSummary, HeroDecision, Position } from '../types';
+import { HeroDecision, HeroSummary, TileCoord } from '../types';
 import { refineDecisionPositionForCover } from './cover';
 
-/**
- * Simple rule-based fallback brain.
- * Used when the personality brain or LLM is unavailable.
- */
 export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
   decide(summary: HeroSummary): HeroDecision {
     const allies = summary.nearbyAllies;
     const enemies = summary.nearbyEnemies;
-    let decision: HeroDecision;
-    const allyHpPct = allies.length > 0
-      ? allies.reduce((sum, ally) => sum + ally.hp / ally.maxHp, 0) / allies.length
-      : 1;
+    const allyHpPct =
+      allies.length > 0
+        ? allies.reduce((sum, ally) => sum + ally.hp / ally.maxHp, 0) / allies.length
+        : 1;
 
     if (enemies.length === 0) {
       return {
         intent: 'hold_position',
-        moveTo: { ...summary.heroState.position },
+        moveToTile: { ...summary.heroState.tile },
         priority: 'low',
         rationaleTag: 'fallback_no_enemies',
         recheckInSec: 3,
       };
     }
 
+    let decision: HeroDecision;
     if (allyHpPct < 0.35) {
-      decision = this.protectDecision(allies);
+      decision = this.protectDecision(allies.map((ally) => ({ tile: ally.tile, hp: ally.hp })));
     } else if (allyHpPct < 0.55 && allies.length <= enemies.length) {
-      decision = this.holdDecision(summary.heroState.position);
+      decision = this.holdDecision(summary.heroState.tile);
     } else {
-      decision = this.advanceDecision(enemies);
+      decision = this.advanceDecision(enemies.map((enemy) => enemy.tile), summary);
     }
 
     return refineDecisionPositionForCover(summary, decision);
   }
 
-  private advanceDecision(enemies: { position: Position }[]): HeroDecision {
-    const center = this.clusterCenter(enemies);
+  private advanceDecision(enemies: TileCoord[], summary: HeroSummary): HeroDecision {
     return {
       intent: 'advance_to_point',
-      moveTo: center,
+      moveToTile: this.clusterCenter(enemies, summary),
       priority: 'medium',
       rationaleTag: 'advance_toward_enemies',
       recheckInSec: 2,
     };
   }
 
-  private protectDecision(allies: { position: Position; hp: number }[]): HeroDecision {
+  private protectDecision(allies: Array<{ tile: TileCoord; hp: number }>): HeroDecision {
     if (allies.length === 0) {
       return {
         intent: 'hold_position',
@@ -66,35 +62,38 @@ export class LocalRuleBasedHeroBrain implements IHeroDecisionProvider {
 
     return {
       intent: 'protect_target',
-      moveTo: { ...weakest.position },
+      moveToTile: { ...weakest.tile },
       priority: 'medium',
       rationaleTag: 'protect_weakest_ally',
       recheckInSec: 2,
     };
   }
 
-  private holdDecision(heroPos: Position): HeroDecision {
+  private holdDecision(heroTile: TileCoord): HeroDecision {
     return {
       intent: 'hold_position',
-      moveTo: { ...heroPos },
+      moveToTile: { ...heroTile },
       priority: 'medium',
       rationaleTag: 'hold_ordered',
       recheckInSec: 3,
     };
   }
 
-  private clusterCenter(units: { position: Position }[]): Position {
-    if (units.length === 0) return { x: 512, y: 384 };
-
-    let sumX = 0;
-    let sumY = 0;
-    for (const u of units) {
-      sumX += u.position.x;
-      sumY += u.position.y;
+  private clusterCenter(tiles: TileCoord[], summary: HeroSummary): TileCoord {
+    if (tiles.length === 0) {
+      return { col: Math.floor(summary.grid.cols / 2), row: Math.floor(summary.grid.rows / 2) };
     }
+
+    let sumCol = 0;
+    let sumRow = 0;
+    for (const tile of tiles) {
+      sumCol += tile.col;
+      sumRow += tile.row;
+    }
+
     return {
-      x: sumX / units.length,
-      y: sumY / units.length,
+      col: Math.round(sumCol / tiles.length),
+      row: Math.round(sumRow / tiles.length),
     };
   }
 }

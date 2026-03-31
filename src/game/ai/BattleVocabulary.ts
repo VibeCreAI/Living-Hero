@@ -1,4 +1,4 @@
-import { BattleObstacle, Position, UnitRole, UnitState } from '../types';
+import { BattleGridSummary, BattleObstacle, Position, TileCoord, UnitRole, UnitState } from '../types';
 
 /**
  * Generates and manages short nicknames for units and spatial labels
@@ -122,13 +122,24 @@ export type CardinalRegion =
   | 'southeast'
   | 'southwest';
 
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
+export function worldToTile(pos: Position, grid: BattleGridSummary): TileCoord {
+  return {
+    col: Math.max(0, Math.min(grid.cols - 1, Math.floor(pos.x / grid.tileWidth))),
+    row: Math.max(0, Math.min(grid.rows - 1, Math.floor(pos.y / grid.tileHeight))),
+  };
+}
 
-/** Convert a position to a cardinal region label */
-export function positionToRegion(pos: Position): CardinalRegion {
-  const xNorm = pos.x / MAP_WIDTH;
-  const yNorm = pos.y / MAP_HEIGHT;
+export function tileToWorld(tile: TileCoord, grid: BattleGridSummary): Position {
+  return {
+    x: tile.col * grid.tileWidth + grid.tileWidth / 2,
+    y: tile.row * grid.tileHeight + grid.tileHeight / 2,
+  };
+}
+
+/** Convert a tile to a cardinal region label */
+export function tileToRegion(tile: TileCoord, grid: BattleGridSummary): CardinalRegion {
+  const xNorm = (tile.col + 0.5) / grid.cols;
+  const yNorm = (tile.row + 0.5) / grid.rows;
 
   const col = xNorm < 0.33 ? 'west' : xNorm > 0.66 ? 'east' : '';
   const row = yNorm < 0.33 ? 'north' : yNorm > 0.66 ? 'south' : '';
@@ -139,45 +150,54 @@ export function positionToRegion(pos: Position): CardinalRegion {
   return 'center';
 }
 
-/** Convert a cardinal region to approximate map coordinates */
-export function regionToPosition(
+/** Convert a position to a cardinal region label */
+export function positionToRegion(pos: Position, grid: BattleGridSummary): CardinalRegion {
+  return tileToRegion(worldToTile(pos, grid), grid);
+}
+
+/** Convert a cardinal region to approximate map tile */
+export function regionToTile(
   region: string,
-  heroPosition?: Position
-): Position | undefined {
+  grid: BattleGridSummary,
+  heroTile?: TileCoord
+): TileCoord | undefined {
   const r = region.toLowerCase().trim();
-  const heroX = heroPosition?.x ?? MAP_WIDTH / 2;
-  const heroY = heroPosition?.y ?? MAP_HEIGHT / 2;
+  const heroCol = heroTile?.col ?? Math.floor(grid.cols / 2);
+  const heroRow = heroTile?.row ?? Math.floor(grid.rows / 2);
 
   switch (r) {
     case 'north':
-      return { x: heroX, y: MAP_HEIGHT * 0.17 };
+      return { col: heroCol, row: Math.floor(grid.rows * 0.17) };
     case 'south':
-      return { x: heroX, y: MAP_HEIGHT * 0.83 };
+      return { col: heroCol, row: Math.floor(grid.rows * 0.83) };
     case 'east':
-      return { x: MAP_WIDTH * 0.83, y: heroY };
+      return { col: Math.floor(grid.cols * 0.83), row: heroRow };
     case 'west':
-      return { x: MAP_WIDTH * 0.17, y: heroY };
+      return { col: Math.floor(grid.cols * 0.17), row: heroRow };
     case 'center':
-      return { x: MAP_WIDTH * 0.5, y: MAP_HEIGHT * 0.5 };
+      return { col: Math.floor(grid.cols * 0.5), row: Math.floor(grid.rows * 0.5) };
     case 'northeast':
-      return { x: MAP_WIDTH * 0.8, y: MAP_HEIGHT * 0.2 };
+      return { col: Math.floor(grid.cols * 0.8), row: Math.floor(grid.rows * 0.2) };
     case 'northwest':
-      return { x: MAP_WIDTH * 0.2, y: MAP_HEIGHT * 0.2 };
+      return { col: Math.floor(grid.cols * 0.2), row: Math.floor(grid.rows * 0.2) };
     case 'southeast':
-      return { x: MAP_WIDTH * 0.8, y: MAP_HEIGHT * 0.8 };
+      return { col: Math.floor(grid.cols * 0.8), row: Math.floor(grid.rows * 0.8) };
     case 'southwest':
-      return { x: MAP_WIDTH * 0.2, y: MAP_HEIGHT * 0.8 };
+      return { col: Math.floor(grid.cols * 0.2), row: Math.floor(grid.rows * 0.8) };
     default:
       return undefined;
   }
 }
 
 /** Get a directional label for an obstacle based on its map position */
-export function obstacleDirectionLabel(obstacle: BattleObstacle): string {
+export function obstacleDirectionLabel(
+  obstacle: BattleObstacle,
+  grid: BattleGridSummary
+): string {
   const center: Position = {
     x: obstacle.x + obstacle.width / 2,
     y: obstacle.y + obstacle.height / 2,
   };
-  const region = positionToRegion(center);
+  const region = positionToRegion(center, grid);
   return `${region} ${obstacle.label}`;
 }

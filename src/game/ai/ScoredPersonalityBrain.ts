@@ -80,18 +80,12 @@ export class ScoredPersonalityBrain implements IHeroDecisionProvider {
     const decision: HeroDecision = {
       intent: selected.intent,
       targetId: selected.targetId,
-      moveTo: selected.moveTo,
+      moveToTile: selected.moveToTile,
       skillId: selected.skillId,
       priority: this.derivePriority(selected, summary),
       rationaleTag: buildRationale(selected, summary),
       recheckInSec,
     };
-
-    // 5. Validate
-    if (decision.moveTo) {
-      decision.moveTo.x = Math.max(20, Math.min(1004, decision.moveTo.x));
-      decision.moveTo.y = Math.max(20, Math.min(748, decision.moveTo.y));
-    }
 
     if (decision.targetId) {
       const targetExists = summary.nearbyEnemies.some((e) => e.id === decision.targetId)

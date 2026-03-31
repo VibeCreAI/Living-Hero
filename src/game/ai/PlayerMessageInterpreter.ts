@@ -1,20 +1,15 @@
-import { GroupOrder, HeroDecision, HeroSummary, Position, UnitGroup, UnitState } from '../types';
+import { GroupOrder, HeroDecision, HeroSummary, TileCoord, UnitGroup, UnitState } from '../types';
 import { chooseTacticalAnchor, resolveNamedObstacleAnchor, TacticalIntent } from './cover';
 
 interface NamedLocation {
   name: string;
-  position: Position;
+  tile: TileCoord;
 }
 
 interface ParsedGroupDecision {
   group: UnitGroup;
   decision: HeroDecision;
 }
-
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
-const MAP_EDGE_PADDING = 96;
-const MAP_CENTER = { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 };
 
 export function interpretPlayerMessage(
   summary: HeroSummary,
@@ -42,10 +37,7 @@ function interpretGroupedMessage(
   for (const clause of clauses) {
     const parsed = interpretSingleMessage(summary, clause.directive, terrainDescription);
     if (parsed) {
-      parsedOrders.push({
-        group: clause.group,
-        decision: parsed,
-      });
+      parsedOrders.push({ group: clause.group, decision: parsed });
     }
   }
 
@@ -54,43 +46,33 @@ function interpretGroupedMessage(
   }
 
   const primary = selectPrimaryGroupDecision(parsedOrders);
-  const priorities = parsedOrders.map((entry) => entry.decision.priority);
-  const recheckInSec = Math.min(...parsedOrders.map((entry) => entry.decision.recheckInSec));
-
   return {
     intent: primary.decision.intent,
     targetId: primary.decision.targetId,
-    moveTo: primary.decision.moveTo ? { ...primary.decision.moveTo } : undefined,
+    moveToTile: primary.decision.moveToTile ? { ...primary.decision.moveToTile } : undefined,
     groupOrders: parsedOrders.map((entry) => buildGroupOrder(entry)),
     groupOrderMode: 'explicit_only',
-    priority: highestPriority(priorities),
+    priority: highestPriority(parsedOrders.map((entry) => entry.decision.priority)),
     rationaleTag: 'parsed_group_orders',
-    recheckInSec,
+    recheckInSec: Math.min(...parsedOrders.map((entry) => entry.decision.recheckInSec)),
   };
 }
 
-/**
- * Detect abstract split-intent commands like "each group target different enemy",
- * "spread out and attack", "assign different targets", etc.
- * Auto-generates smart group assignments based on unit roles and proximity.
- */
 function interpretAbstractSplitMessage(
   summary: HeroSummary,
   playerMessage: string
 ): HeroDecision | null {
   const message = playerMessage.toLowerCase();
-
   if (!isAbstractSplitIntent(message)) {
     return null;
   }
 
-  const aliveEnemies = summary.nearbyEnemies.filter((u) => u.state !== 'dead');
-  const aliveAllies = summary.nearbyAllies.filter((u) => u.state !== 'dead');
+  const aliveEnemies = summary.nearbyEnemies.filter((unit) => unit.state !== 'dead');
+  const aliveAllies = summary.nearbyAllies.filter((unit) => unit.state !== 'dead');
   if (aliveEnemies.length === 0) {
     return null;
   }
 
-  // Determine the base intent from the message
   const isFocusIntent = containsAny(message, ['target', 'attack', 'focus', 'kill', 'fight']);
   const isDefensiveIntent = containsAny(message, ['defend', 'hold', 'guard', 'protect', 'cover']);
 
@@ -102,7 +84,6 @@ function interpretAbstractSplitMessage(
     return buildSplitDefensiveOrders(summary, aliveEnemies, aliveAllies);
   }
 
-  // Default: split focus
   return buildSplitFocusOrders(summary, aliveEnemies, aliveAllies);
 }
 
@@ -127,51 +108,40 @@ function isAbstractSplitIntent(message: string): boolean {
   return ABSTRACT_SPLIT_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-/**
- * Auto-assign each group to a different enemy based on smart matching:
- * - Warriors → nearest enemy warrior (melee vs melee)
- * - Archers → nearest enemy archer (ranged vs ranged) or weakest enemy
- * - Hero → highest-value target (lowest HP or most dangerous)
- */
 function buildSplitFocusOrders(
   summary: HeroSummary,
   enemies: UnitState[],
   _allies: UnitState[]
 ): HeroDecision {
-  const heroPos = summary.heroState.position;
+  const heroTile = summary.heroState.tile;
   const assigned = new Set<string>();
   const groupOrders: GroupOrder[] = [];
-
-  // Sort enemies by distance from hero for assignment
   const sortedByDistance = [...enemies].sort(
-    (a, b) => dist(a.position, heroPos) - dist(b.position, heroPos)
+    (a, b) => tileDistance(a.tile, heroTile) - tileDistance(b.tile, heroTile)
   );
 
-  // Warriors → prefer enemy warriors (melee matchup), or nearest unassigned
-  const warriorTarget = pickTarget(enemies, assigned, 'warrior', heroPos);
+  const warriorTarget = pickTarget(enemies, assigned, 'warrior', heroTile);
   if (warriorTarget) {
     assigned.add(warriorTarget.id);
     groupOrders.push({
       group: 'warriors',
       intent: 'focus_enemy',
       targetId: warriorTarget.id,
-      moveTo: { ...warriorTarget.position },
+      moveToTile: { ...warriorTarget.tile },
     });
   }
 
-  // Archers → prefer enemy archers (counter-ranged), or weakest unassigned
-  const archerTarget = pickTarget(enemies, assigned, 'archer', heroPos);
+  const archerTarget = pickTarget(enemies, assigned, 'archer', heroTile);
   if (archerTarget) {
     assigned.add(archerTarget.id);
     groupOrders.push({
       group: 'archers',
       intent: 'focus_enemy',
       targetId: archerTarget.id,
-      moveTo: { ...archerTarget.position },
+      moveToTile: { ...archerTarget.tile },
     });
   }
 
-  // Hero → weakest remaining enemy (highest value kill)
   const heroTarget = pickWeakestUnassigned(enemies, assigned) ?? sortedByDistance[0];
   if (heroTarget) {
     assigned.add(heroTarget.id);
@@ -179,7 +149,7 @@ function buildSplitFocusOrders(
       group: 'hero',
       intent: 'focus_enemy',
       targetId: heroTarget.id,
-      moveTo: { ...heroTarget.position },
+      moveToTile: { ...heroTarget.tile },
     });
   }
 
@@ -187,7 +157,7 @@ function buildSplitFocusOrders(
   return {
     intent: 'focus_enemy',
     targetId: primary?.targetId,
-    moveTo: primary?.moveTo ? { ...primary.moveTo } : undefined,
+    moveToTile: primary?.moveToTile ? { ...primary.moveToTile } : undefined,
     groupOrders,
     groupOrderMode: 'explicit_only',
     priority: 'high',
@@ -201,39 +171,35 @@ function buildSplitDefensiveOrders(
   enemies: UnitState[],
   allies: UnitState[]
 ): HeroDecision {
-  const heroPos = summary.heroState.position;
+  const heroTile = summary.heroState.tile;
   const groupOrders: GroupOrder[] = [];
 
-  // Warriors → advance to screen against nearest enemies
-  const enemyCenter = clusterCenter(enemies);
+  const enemyCenter = clusterCenter(enemies.map((enemy) => enemy.tile));
   if (enemyCenter) {
-    const screenPoint = midpoint(heroPos, enemyCenter);
     groupOrders.push({
       group: 'warriors',
       intent: 'advance_to_point',
-      moveTo: screenPoint,
+      moveToTile: midpoint(heroTile, enemyCenter),
     });
   }
 
-  // Archers → hold position (stay at range)
-  const archerAllies = allies.filter((u) => u.role === 'archer');
-  const archerCenter = clusterCenter(archerAllies) ?? heroPos;
+  const archerAllies = allies.filter((unit) => unit.role === 'archer');
+  const archerCenter = clusterCenter(archerAllies.map((unit) => unit.tile)) ?? heroTile;
   groupOrders.push({
     group: 'archers',
     intent: 'hold_position',
-    moveTo: { ...archerCenter },
+    moveToTile: { ...archerCenter },
   });
 
-  // Hero → protect (move between warriors and archers)
   groupOrders.push({
     group: 'hero',
     intent: 'protect_target',
-    moveTo: { ...heroPos },
+    moveToTile: { ...heroTile },
   });
 
   return {
     intent: 'hold_position',
-    moveTo: { ...heroPos },
+    moveToTile: { ...heroTile },
     groupOrders,
     groupOrderMode: 'explicit_only',
     priority: 'medium',
@@ -242,38 +208,42 @@ function buildSplitDefensiveOrders(
   };
 }
 
-/** Pick the best target for a group, preferring same-role matchup */
 function pickTarget(
   enemies: UnitState[],
   assigned: Set<string>,
   preferredRole: UnitState['role'],
-  referencePoint: Position
+  referenceTile: TileCoord
 ): UnitState | undefined {
-  const available = enemies.filter((e) => !assigned.has(e.id));
-  if (available.length === 0) return undefined;
-
-  // Try role match first
-  const roleMatches = available.filter((e) => e.role === preferredRole);
-  if (roleMatches.length > 0) {
-    return roleMatches.sort((a, b) => dist(a.position, referencePoint) - dist(b.position, referencePoint))[0];
+  const available = enemies.filter((enemy) => !assigned.has(enemy.id));
+  if (available.length === 0) {
+    return undefined;
   }
 
-  // Fall back to nearest
-  return available.sort((a, b) => dist(a.position, referencePoint) - dist(b.position, referencePoint))[0];
+  const roleMatches = available.filter((enemy) => enemy.role === preferredRole);
+  if (roleMatches.length > 0) {
+    return roleMatches.sort((a, b) => tileDistance(a.tile, referenceTile) - tileDistance(b.tile, referenceTile))[0];
+  }
+
+  return available.sort((a, b) => tileDistance(a.tile, referenceTile) - tileDistance(b.tile, referenceTile))[0];
 }
 
 function pickWeakestUnassigned(enemies: UnitState[], assigned: Set<string>): UnitState | undefined {
-  const available = enemies.filter((e) => !assigned.has(e.id));
-  if (available.length === 0) return undefined;
+  const available = enemies.filter((enemy) => !assigned.has(enemy.id));
+  if (available.length === 0) {
+    return undefined;
+  }
   return available.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
 }
 
-function midpoint(a: Position, b: Position): Position {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+function midpoint(a: TileCoord, b: TileCoord): TileCoord {
+  return {
+    col: Math.round((a.col + b.col) / 2),
+    row: Math.round((a.row + b.row) / 2),
+  };
 }
 
-function dist(a: Position, b: Position): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function tileDistance(a: TileCoord, b: TileCoord): number {
+  return Math.hypot(a.col - b.col, a.row - b.row);
 }
 
 function interpretSingleMessage(
@@ -282,49 +252,30 @@ function interpretSingleMessage(
   terrainDescription?: string
 ): HeroDecision | null {
   const message = playerMessage.toLowerCase();
-  const namedEnemy = resolveNamedUnit(summary.nearbyEnemies, message, summary.heroState.position);
+  const namedEnemy = resolveNamedUnit(summary.nearbyEnemies, message, summary.heroState.tile);
   const alliedArchers = summary.nearbyAllies.filter((unit) => unit.role === 'archer');
-  const archersCenter = alliedArchers.length > 0 ? clusterCenter(alliedArchers) : undefined;
-  const alliesCenter = clusterCenter(summary.nearbyAllies);
-  const enemiesCenter = clusterCenter(summary.nearbyEnemies);
+  const archersCenter = alliedArchers.length > 0 ? clusterCenter(alliedArchers.map((unit) => unit.tile)) : undefined;
+  const alliesCenter = clusterCenter(summary.nearbyAllies.map((unit) => unit.tile));
+  const enemiesCenter = clusterCenter(summary.nearbyEnemies.map((unit) => unit.tile));
 
-  if (
-    containsAny(message, ['retreat', 'fall back', 'regroup', 'pull back', 'withdraw', 'move back'])
-  ) {
-    const baseAnchor = alliesCenter ?? summary.heroState.position;
-    const namedLocation = resolveNamedLocation(
-      summary,
-      message,
-      'retreat',
-      terrainDescription,
-      baseAnchor
-    );
-
+  if (containsAny(message, ['retreat', 'fall back', 'regroup', 'pull back', 'withdraw', 'move back'])) {
+    const baseAnchor = alliesCenter ?? summary.heroState.tile;
+    const namedLocation = resolveNamedLocation(summary, message, 'retreat', terrainDescription, baseAnchor);
     return {
       intent: 'retreat_to_point',
-      moveTo: namedLocation?.position ?? chooseTacticalAnchor(summary, 'retreat', baseAnchor),
+      moveToTile: namedLocation?.tile ?? chooseTacticalAnchor(summary, 'retreat', baseAnchor),
       priority: 'high',
       rationaleTag: namedLocation ? 'parsed_retreat_named_location' : 'parsed_retreat_message',
       recheckInSec: 60,
     };
   }
 
-  if (
-    containsAny(message, ['hold', 'wait', 'stay', 'defend here']) ||
-    message.includes('behind')
-  ) {
-    const baseAnchor = summary.heroState.position;
-    const namedLocation = resolveNamedLocation(
-      summary,
-      message,
-      'hold',
-      terrainDescription,
-      baseAnchor
-    );
-
+  if (containsAny(message, ['hold', 'wait', 'stay', 'defend here']) || message.includes('behind')) {
+    const baseAnchor = summary.heroState.tile;
+    const namedLocation = resolveNamedLocation(summary, message, 'hold', terrainDescription, baseAnchor);
     return {
       intent: 'hold_position',
-      moveTo: namedLocation?.position ?? chooseTacticalAnchor(summary, 'hold', baseAnchor),
+      moveToTile: namedLocation?.tile ?? chooseTacticalAnchor(summary, 'hold', baseAnchor),
       priority: 'medium',
       rationaleTag: namedLocation ? 'parsed_hold_named_location' : 'parsed_hold_message',
       recheckInSec: 60,
@@ -332,18 +283,11 @@ function interpretSingleMessage(
   }
 
   if (containsAny(message, ['protect', 'guard', 'screen', 'defend'])) {
-    const baseAnchor = archersCenter ?? alliesCenter ?? summary.heroState.position;
-    const namedLocation = resolveNamedLocation(
-      summary,
-      message,
-      'protect',
-      terrainDescription,
-      baseAnchor
-    );
-
+    const baseAnchor = archersCenter ?? alliesCenter ?? summary.heroState.tile;
+    const namedLocation = resolveNamedLocation(summary, message, 'protect', terrainDescription, baseAnchor);
     return {
       intent: 'protect_target',
-      moveTo: namedLocation?.position ?? chooseTacticalAnchor(summary, 'protect', baseAnchor),
+      moveToTile: namedLocation?.tile ?? chooseTacticalAnchor(summary, 'protect', baseAnchor),
       priority: 'medium',
       rationaleTag: namedLocation
         ? 'parsed_protect_named_location'
@@ -359,7 +303,7 @@ function interpretSingleMessage(
       return {
         intent: 'focus_enemy',
         targetId: namedEnemy.id,
-        moveTo: { ...namedEnemy.position },
+        moveToTile: { ...namedEnemy.tile },
         priority: 'high',
         rationaleTag: 'parsed_focus_message',
         recheckInSec: 45,
@@ -371,7 +315,7 @@ function interpretSingleMessage(
       return {
         intent: 'focus_enemy',
         targetId: closestEnemy.id,
-        moveTo: { ...closestEnemy.position },
+        moveToTile: { ...closestEnemy.tile },
         priority: 'high',
         rationaleTag: 'parsed_focus_generic',
         recheckInSec: 45,
@@ -380,21 +324,12 @@ function interpretSingleMessage(
   }
 
   if (containsAny(message, ['advance', 'push', 'forward', 'move to', 'go to', 'move'])) {
-    const baseAnchor = namedEnemy?.position ?? enemiesCenter ?? summary.heroState.position;
-    const namedLocation = resolveNamedLocation(
-      summary,
-      message,
-      'advance',
-      terrainDescription,
-      baseAnchor
-    );
-
+    const baseAnchor = namedEnemy?.tile ?? enemiesCenter ?? summary.heroState.tile;
+    const namedLocation = resolveNamedLocation(summary, message, 'advance', terrainDescription, baseAnchor);
     return {
       intent: 'advance_to_point',
-      moveTo:
-        namedLocation?.position ??
-        namedEnemy?.position ??
-        chooseTacticalAnchor(summary, 'advance', baseAnchor),
+      moveToTile:
+        namedLocation?.tile ?? namedEnemy?.tile ?? chooseTacticalAnchor(summary, 'advance', baseAnchor),
       targetId: namedEnemy?.id,
       priority: 'medium',
       rationaleTag: namedLocation
@@ -445,8 +380,8 @@ function extractGroupClauses(playerMessage: string): Array<{ group: UnitGroup; d
       .replace(/\bfrom there\b/g, '')
       .replace(/\bwhile\b/g, '')
       .trim();
-    const directive = `${leadingVerb ? `${leadingVerb} ` : ''}${rest}`.trim();
 
+    const directive = `${leadingVerb ? `${leadingVerb} ` : ''}${rest}`.trim();
     if (directive.length === 0) {
       continue;
     }
@@ -473,18 +408,9 @@ function normalizeGroupLeadVerb(rawVerb: string | undefined): string {
 }
 
 function toUnitGroup(token: string): UnitGroup | null {
-  if (token.startsWith('archer')) {
-    return 'archers';
-  }
-
-  if (token.startsWith('hero') || token === 'commander') {
-    return 'hero';
-  }
-
-  if (token.startsWith('warrior')) {
-    return 'warriors';
-  }
-
+  if (token.startsWith('archer')) return 'archers';
+  if (token.startsWith('hero') || token === 'commander') return 'hero';
+  if (token.startsWith('warrior')) return 'warriors';
   return null;
 }
 
@@ -493,7 +419,7 @@ function buildGroupOrder(entry: ParsedGroupDecision): GroupOrder {
     group: entry.group,
     intent: entry.decision.intent,
     targetId: entry.decision.targetId,
-    moveTo: entry.decision.moveTo ? { ...entry.decision.moveTo } : undefined,
+    moveToTile: entry.decision.moveToTile ? { ...entry.decision.moveToTile } : undefined,
   };
 }
 
@@ -511,30 +437,19 @@ function scoreGroupDecision(entry: ParsedGroupDecision): number {
     use_skill: 0,
   };
 
-  return (
-    intentScore[entry.decision.intent] +
-    (entry.group === 'warriors' ? 0.25 : entry.group === 'hero' ? 0.1 : 0)
-  );
+  return intentScore[entry.decision.intent] + (entry.group === 'warriors' ? 0.25 : entry.group === 'hero' ? 0.1 : 0);
 }
 
-function highestPriority(
-  priorities: HeroDecision['priority'][]
-): HeroDecision['priority'] {
-  if (priorities.includes('high')) {
-    return 'high';
-  }
-
-  if (priorities.includes('medium')) {
-    return 'medium';
-  }
-
+function highestPriority(priorities: HeroDecision['priority'][]): HeroDecision['priority'] {
+  if (priorities.includes('high')) return 'high';
+  if (priorities.includes('medium')) return 'medium';
   return 'low';
 }
 
 function resolveNamedUnit(
   units: UnitState[],
   message: string,
-  referencePoint?: Position
+  referenceTile?: TileCoord
 ): UnitState | undefined {
   let bestMatch: UnitState | undefined;
   let bestLength = -1;
@@ -562,13 +477,13 @@ function resolveNamedUnit(
     return undefined;
   }
 
-  return findNearestByRole(units, role, referencePoint);
+  return findNearestByRole(units, role, referenceTile);
 }
 
 function findNearestByRole(
   units: UnitState[],
   role: UnitState['role'],
-  referencePoint = { x: 512, y: 384 }
+  referenceTile = { col: 0, row: 0 }
 ): UnitState | undefined {
   let nearest: UnitState | undefined;
   let nearestDistance = Infinity;
@@ -578,7 +493,7 @@ function findNearestByRole(
       continue;
     }
 
-    const distance = Math.hypot(unit.position.x - referencePoint.x, unit.position.y - referencePoint.y);
+    const distance = tileDistance(unit.tile, referenceTile);
     if (distance < nearestDistance) {
       nearestDistance = distance;
       nearest = unit;
@@ -593,17 +508,17 @@ function resolveNamedLocation(
   message: string,
   intent: TacticalIntent,
   terrainDescription: string | undefined,
-  anchor: Position
+  anchor: TileCoord
 ): NamedLocation | undefined {
   const obstacleAnchor = resolveNamedObstacleAnchor(summary, message, intent, anchor);
   if (obstacleAnchor) {
     return {
       name: obstacleAnchor.obstacle.label,
-      position: obstacleAnchor.position,
+      tile: obstacleAnchor.tile,
     };
   }
 
-  const directionalAnchor = resolveDirectionalAnchor(message, anchor);
+  const directionalAnchor = resolveDirectionalAnchor(summary, message, anchor);
   if (directionalAnchor) {
     return directionalAnchor;
   }
@@ -628,12 +543,14 @@ function resolveNamedLocation(
       continue;
     }
 
+    const x = (Number(x1) + Number(x2)) / 2;
+    const y = (Number(y1) + Number(y2)) / 2;
     bestLength = name.length;
     bestMatch = {
       name: rawName.trim(),
-      position: {
-        x: (Number(x1) + Number(x2)) / 2,
-        y: (Number(y1) + Number(y2)) / 2,
+      tile: {
+        col: Math.max(0, Math.min(summary.grid.cols - 1, Math.floor(x / summary.grid.tileWidth))),
+        row: Math.max(0, Math.min(summary.grid.rows - 1, Math.floor(y / summary.grid.tileHeight))),
       },
     };
   }
@@ -642,10 +559,11 @@ function resolveNamedLocation(
 }
 
 function resolveDirectionalAnchor(
+  summary: HeroSummary,
   message: string,
-  anchor: Position
+  anchor: TileCoord
 ): NamedLocation | undefined {
-  const clockAnchor = resolveClockAnchor(message, anchor);
+  const clockAnchor = resolveClockAnchor(summary, message, anchor);
   if (clockAnchor) {
     return clockAnchor;
   }
@@ -660,28 +578,27 @@ function resolveDirectionalAnchor(
     return undefined;
   }
 
-  let x = anchor.x;
-  let y = anchor.y;
+  let tile = { ...anchor };
   const labels: string[] = [];
 
   if (north && !south) {
-    y = MAP_EDGE_PADDING;
+    tile.row = 1;
     labels.push('north');
   } else if (south && !north) {
-    y = MAP_HEIGHT - MAP_EDGE_PADDING;
+    tile.row = summary.grid.rows - 2;
     labels.push('south');
   } else if (center) {
-    y = MAP_CENTER.y;
+    tile.row = Math.floor(summary.grid.rows / 2);
   }
 
   if (east && !west) {
-    x = MAP_WIDTH - MAP_EDGE_PADDING;
+    tile.col = summary.grid.cols - 2;
     labels.push('east');
   } else if (west && !east) {
-    x = MAP_EDGE_PADDING;
+    tile.col = 1;
     labels.push('west');
   } else if (center) {
-    x = MAP_CENTER.x;
+    tile.col = Math.floor(summary.grid.cols / 2);
   }
 
   if (center && labels.length === 0) {
@@ -690,13 +607,14 @@ function resolveDirectionalAnchor(
 
   return {
     name: `${labels.join(' ')} zone`.trim(),
-    position: { x, y },
+    tile,
   };
 }
 
 function resolveClockAnchor(
+  summary: HeroSummary,
   message: string,
-  anchor: Position
+  anchor: TileCoord
 ): NamedLocation | undefined {
   const match = message.match(CLOCK_DIRECTION_REGEX);
   if (!match) {
@@ -707,46 +625,46 @@ function resolveClockAnchor(
   const rawMinutes = match[2] ? Number(match[2]) : 0;
   const hour = rawHour % 12;
   const angle = ((hour + rawMinutes / 60) / 12) * Math.PI * 2 - Math.PI / 2;
-  const direction = { x: Math.cos(angle), y: Math.sin(angle) };
-  const position = projectTowardPlayableEdge(anchor, direction);
+  const direction = { col: Math.cos(angle), row: Math.sin(angle) };
+  const tile = projectTowardPlayableEdge(summary, anchor, direction);
   const label = rawMinutes > 0 ? `${match[1]}:${match[2]} o'clock` : `${match[1]} o'clock`;
 
   return {
     name: `${label} direction`,
-    position,
+    tile,
   };
 }
 
 function projectTowardPlayableEdge(
-  anchor: Position,
-  direction: Position
-): Position {
-  const minX = MAP_EDGE_PADDING;
-  const maxX = MAP_WIDTH - MAP_EDGE_PADDING;
-  const minY = MAP_EDGE_PADDING;
-  const maxY = MAP_HEIGHT - MAP_EDGE_PADDING;
+  summary: HeroSummary,
+  anchor: TileCoord,
+  direction: { col: number; row: number }
+): TileCoord {
+  const minCol = 1;
+  const maxCol = summary.grid.cols - 2;
+  const minRow = 1;
+  const maxRow = summary.grid.rows - 2;
   const epsilon = 0.0001;
   const candidates: number[] = [];
 
-  if (Math.abs(direction.x) > epsilon) {
-    candidates.push(((direction.x > 0 ? maxX : minX) - anchor.x) / direction.x);
+  if (Math.abs(direction.col) > epsilon) {
+    candidates.push(((direction.col > 0 ? maxCol : minCol) - anchor.col) / direction.col);
   }
-
-  if (Math.abs(direction.y) > epsilon) {
-    candidates.push(((direction.y > 0 ? maxY : minY) - anchor.y) / direction.y);
+  if (Math.abs(direction.row) > epsilon) {
+    candidates.push(((direction.row > 0 ? maxRow : minRow) - anchor.row) / direction.row);
   }
 
   const scale = Math.min(...candidates.filter((value) => value >= 0));
   if (!Number.isFinite(scale)) {
     return {
-      x: clamp(anchor.x, minX, maxX),
-      y: clamp(anchor.y, minY, maxY),
+      col: Math.max(minCol, Math.min(maxCol, anchor.col)),
+      row: Math.max(minRow, Math.min(maxRow, anchor.row)),
     };
   }
 
   return {
-    x: clamp(anchor.x + direction.x * scale, minX, maxX),
-    y: clamp(anchor.y + direction.y * scale, minY, maxY),
+    col: Math.max(minCol, Math.min(maxCol, Math.round(anchor.col + direction.col * scale))),
+    row: Math.max(minRow, Math.min(maxRow, Math.round(anchor.row + direction.row * scale))),
   };
 }
 
@@ -755,10 +673,7 @@ function findNearestEnemy(summary: HeroSummary): UnitState | undefined {
   let nearestDistance = Infinity;
 
   for (const enemy of summary.nearbyEnemies) {
-    const distance = Math.hypot(
-      enemy.position.x - summary.heroState.position.x,
-      enemy.position.y - summary.heroState.position.y
-    );
+    const distance = tileDistance(enemy.tile, summary.heroState.tile);
     if (distance < nearestDistance) {
       nearestDistance = distance;
       nearest = enemy;
@@ -768,21 +683,21 @@ function findNearestEnemy(summary: HeroSummary): UnitState | undefined {
   return nearest;
 }
 
-function clusterCenter(units: UnitState[]): Position | undefined {
-  if (units.length === 0) {
+function clusterCenter(tiles: TileCoord[]): TileCoord | undefined {
+  if (tiles.length === 0) {
     return undefined;
   }
 
-  let sumX = 0;
-  let sumY = 0;
-  for (const unit of units) {
-    sumX += unit.position.x;
-    sumY += unit.position.y;
+  let sumCol = 0;
+  let sumRow = 0;
+  for (const tile of tiles) {
+    sumCol += tile.col;
+    sumRow += tile.row;
   }
 
   return {
-    x: sumX / units.length,
-    y: sumY / units.length,
+    col: Math.round(sumCol / tiles.length),
+    row: Math.round(sumRow / tiles.length),
   };
 }
 
@@ -796,10 +711,6 @@ function hasWord(message: string, terms: string[]): boolean {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 const CLOCK_DIRECTION_REGEX =

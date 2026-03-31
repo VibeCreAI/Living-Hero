@@ -1,26 +1,21 @@
 import {
   GroupOrder,
   HeroDecision,
-  Position,
+  TileCoord,
   UnitGroup,
   UnitOrderMode,
   UnitRole,
 } from '../types';
 import { Hero } from '../entities/Hero';
 import { Unit } from '../entities/Unit';
+import { BattleGrid } from '../systems/BattleGrid';
 
 const ADVANCE_RADIUS = 150;
 const FOCUS_RADIUS = 180;
 const HOLD_RADIUS = 90;
 const PROTECT_RADIUS = 120;
 const RETREAT_RADIUS = 75;
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
-const MAP_PADDING = 28;
 
-const WARRIOR_FRONT_OFFSET = 56;
-const ARCHER_REAR_OFFSET = 64;
-const HERO_FRONT_OFFSET = 42;
 const WARRIOR_FOCUS_LEASH = 280;
 const ARCHER_FOCUS_LEASH = 130;
 const HERO_FOCUS_LEASH = 320;
@@ -39,10 +34,10 @@ const HERO_RETREAT_LEASH = 110;
 
 interface RoleOrderSpec {
   mode: UnitOrderMode;
-  orderPoint: Position;
+  anchorTile: TileCoord;
   targetId?: string;
-  orderRadius: number;
-  orderLeashRadius: number;
+  orderRadiusPx: number;
+  leashRadiusPx: number;
   preferredTargetRole?: UnitRole;
 }
 
@@ -51,26 +46,77 @@ interface RoleExecutionContext {
   heroUnit?: Unit;
   allies: Unit[];
   enemies: Unit[];
-  allyCenter: Position;
-  enemyCenter?: Position;
+  allyCenter: TileCoord;
+  enemyCenter?: TileCoord;
   nearestEnemyToAnchor?: Unit;
   nearestEnemyArcher?: Unit;
   focusTarget?: Unit;
 }
 
+interface UnitAssignment {
+  decision: HeroDecision;
+  allies: Unit[];
+}
+
+type FormationTemplate = Array<{ forward: number; side: number }>;
+
+const WARRIOR_TEMPLATE: FormationTemplate = [
+  { forward: 1, side: 0 },
+  { forward: 1, side: -1 },
+  { forward: 1, side: 1 },
+  { forward: 2, side: 0 },
+  { forward: 2, side: -1 },
+  { forward: 2, side: 1 },
+  { forward: 0, side: -1 },
+  { forward: 0, side: 1 },
+  { forward: -1, side: 0 },
+];
+
+const ARCHER_TEMPLATE: FormationTemplate = [
+  { forward: -1, side: 0 },
+  { forward: -1, side: -1 },
+  { forward: -1, side: 1 },
+  { forward: -2, side: 0 },
+  { forward: -2, side: -1 },
+  { forward: -2, side: 1 },
+  { forward: 0, side: -1 },
+  { forward: 0, side: 1 },
+];
+
+const HERO_TEMPLATE: FormationTemplate = [
+  { forward: 1, side: 0 },
+  { forward: 1, side: -1 },
+  { forward: 1, side: 1 },
+  { forward: 0, side: 0 },
+  { forward: 0, side: -1 },
+  { forward: 0, side: 1 },
+  { forward: -1, side: 0 },
+];
+
 export class IntentExecutor {
+  private battleGrid: BattleGrid | null = null;
+
+  setBattleGrid(battleGrid: BattleGrid): void {
+    this.battleGrid = battleGrid;
+  }
+
   execute(
     hero: Hero,
     decision: HeroDecision,
     alliedUnits: Unit[],
     enemyUnits: Unit[]
   ): void {
+    if (!this.battleGrid) {
+      return;
+    }
+
     const aliveAllies = alliedUnits.filter((unit) => unit.isAlive());
     const aliveEnemies = enemyUnits.filter((unit) => unit.isAlive());
     const heroUnit = aliveAllies.find((unit) => unit.id === hero.state.combatUnitId);
     const ownedAllies = aliveAllies.filter(
       (unit) => unit.state.role !== 'hero' && unit.state.assignedHeroId === hero.state.id
     );
+
     const orderedGroupOrders = this.sortGroupOrders(decision.groupOrders);
     const heroGroupOrder = orderedGroupOrders.find((groupOrder) => groupOrder.group === 'hero');
     const allGroupOrder = orderedGroupOrders.find((groupOrder) => groupOrder.group === 'all');
@@ -79,20 +125,32 @@ export class IntentExecutor {
       : this.stripGroupOrders(decision);
     const usesScopedGroupOrders =
       decision.groupOrderMode === 'explicit_only' && orderedGroupOrders.length > 0 && !allGroupOrder;
+    const formationUnits = heroUnit ? [heroUnit, ...ownedAllies] : [...ownedAllies];
+    const claimedTiles = new Set<string>();
+    let heroAssignment: UnitAssignment | undefined;
+    const allyAssignments = new Map<string, UnitAssignment>();
 
     if (!usesScopedGroupOrders) {
-      this.applyDecisionToHeroUnit(hero, heroUnit, baseDecision, ownedAllies, aliveEnemies);
-      this.applyDecisionToUnits(hero, heroUnit, baseDecision, ownedAllies, aliveEnemies);
+      if (heroUnit?.isAlive()) {
+        heroAssignment = {
+          decision: this.cloneDecision(baseDecision),
+          allies: ownedAllies,
+        };
+      }
+
+      for (const ally of ownedAllies) {
+        allyAssignments.set(ally.id, {
+          decision: this.cloneDecision(baseDecision),
+          allies: ownedAllies,
+        });
+      }
     }
 
-    if (heroGroupOrder) {
-      this.applyDecisionToHeroUnit(
-        hero,
-        heroUnit,
-        this.expandGroupOrder(decision, heroGroupOrder),
-        ownedAllies,
-        aliveEnemies
-      );
+    if (heroGroupOrder && heroUnit?.isAlive()) {
+      heroAssignment = {
+        decision: this.expandGroupOrder(decision, heroGroupOrder),
+        allies: ownedAllies,
+      };
     }
 
     for (const groupOrder of orderedGroupOrders) {
@@ -106,84 +164,95 @@ export class IntentExecutor {
       }
 
       const groupDecision = this.expandGroupOrder(decision, groupOrder);
-      this.applyDecisionToUnits(hero, heroUnit, groupDecision, groupUnits, aliveEnemies);
+      for (const unit of groupUnits) {
+        allyAssignments.set(unit.id, {
+          decision: groupDecision,
+          allies: groupUnits,
+        });
+      }
+    }
+
+    if (heroUnit && heroAssignment) {
+      this.applyUnitAssignment(
+        hero,
+        heroUnit,
+        heroUnit,
+        heroAssignment.decision,
+        heroAssignment.allies,
+        formationUnits,
+        aliveEnemies,
+        claimedTiles
+      );
+    }
+
+    const orderedAllies = [...ownedAllies].sort((a, b) => {
+      const rolePriority = a.state.role === b.state.role
+        ? 0
+        : a.state.role === 'warrior'
+          ? -1
+          : 1;
+      if (rolePriority !== 0) {
+        return rolePriority;
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+    for (const ally of orderedAllies) {
+      const assignment = allyAssignments.get(ally.id);
+      if (!assignment) {
+        continue;
+      }
+
+      this.applyUnitAssignment(
+        hero,
+        heroUnit,
+        ally,
+        assignment.decision,
+        assignment.allies,
+        formationUnits,
+        aliveEnemies,
+        claimedTiles
+      );
     }
   }
 
-  private applyDecisionToHeroUnit(
+  private applyUnitAssignment(
     hero: Hero,
     heroUnit: Unit | undefined,
-    decision: HeroDecision,
-    ownedAllies: Unit[],
-    enemies: Unit[]
-  ): void {
-    if (!heroUnit || !heroUnit.isAlive()) {
-      return;
-    }
-
-    const context = this.buildExecutionContext(hero, heroUnit, decision, ownedAllies, enemies);
-    let spec: RoleOrderSpec | undefined;
-
-    switch (decision.intent) {
-      case 'advance_to_point':
-        spec = this.buildHeroAdvanceSpec(decision, context);
-        break;
-      case 'focus_enemy':
-        spec = this.buildHeroFocusSpec(decision, context);
-        break;
-      case 'protect_target':
-        spec = this.buildHeroProtectSpec(decision, context);
-        break;
-      case 'retreat_to_point':
-        spec = this.buildHeroRetreatSpec(decision, context);
-        break;
-      case 'hold_position':
-        spec = this.buildHeroHoldSpec(decision, context);
-        break;
-      case 'use_skill':
-        return;
-    }
-
-    if (!spec) {
-      return;
-    }
-
-    this.applyOrder(heroUnit, spec);
-    heroUnit.state.targetId = spec.targetId;
-  }
-
-  private applyDecisionToUnits(
-    hero: Hero,
-    heroUnit: Unit | undefined,
+    unit: Unit,
     decision: HeroDecision,
     allies: Unit[],
-    enemies: Unit[]
+    formationUnits: Unit[],
+    enemies: Unit[],
+    claimedTiles: Set<string>
   ): void {
-    if (allies.length === 0) {
+    if (!unit.isAlive() || !this.battleGrid) {
       return;
     }
 
     const context = this.buildExecutionContext(hero, heroUnit, decision, allies, enemies);
-
-    switch (decision.intent) {
-      case 'advance_to_point':
-        this.executeAdvance(decision, context);
-        break;
-      case 'focus_enemy':
-        this.executeFocus(decision, context);
-        break;
-      case 'protect_target':
-        this.executeProtect(decision, context);
-        break;
-      case 'retreat_to_point':
-        this.executeRetreat(decision, context);
-        break;
-      case 'hold_position':
-        this.executeHold(decision, context);
-        break;
-      case 'use_skill':
-        break;
+    const spec = this.buildSpecForUnit(decision, context, unit);
+    if (!spec) {
+      return;
     }
+
+    const orderTile = this.assignFormationTile(
+      spec.anchorTile,
+      context,
+      unit,
+      formationUnits,
+      claimedTiles
+    );
+    this.applyOrder(unit, spec, orderTile);
+    unit.state.targetId = spec.targetId;
+  }
+
+  private cloneDecision(decision: HeroDecision): HeroDecision {
+    return {
+      ...decision,
+      moveToTile: decision.moveToTile ? { ...decision.moveToTile } : undefined,
+      groupOrders: undefined,
+    };
   }
 
   private buildExecutionContext(
@@ -196,7 +265,7 @@ export class IntentExecutor {
     const allyReference = allies.length > 0 ? allies : heroUnit ? [heroUnit] : [];
     const allyCenter = this.clusterCenter(allyReference);
     const enemyCenter = enemies.length > 0 ? this.clusterCenter(enemies) : undefined;
-    const anchor = decision.moveTo ?? allyCenter;
+    const anchor = decision.moveToTile ?? allyCenter;
 
     return {
       hero,
@@ -207,300 +276,217 @@ export class IntentExecutor {
       enemyCenter,
       nearestEnemyToAnchor: this.findNearestToPoint(anchor, enemies),
       nearestEnemyArcher: this.findNearestEnemyByRole(anchor, enemies, 'archer'),
-      focusTarget: decision.targetId
-        ? enemies.find((enemy) => enemy.id === decision.targetId)
-        : undefined,
+      focusTarget: decision.targetId ? enemies.find((enemy) => enemy.id === decision.targetId) : undefined,
     };
   }
 
-  private executeAdvance(decision: HeroDecision, context: RoleExecutionContext): void {
-    const anchor = decision.moveTo ?? context.allyCenter;
-    const screenPoint = this.getScreenPoint(anchor, context);
-    const supportPoint = this.getSupportPoint(anchor, context);
-
-    for (const ally of context.allies) {
-      const spec: RoleOrderSpec =
-        ally.state.role === 'warrior'
-          ? {
-              mode: 'advance',
-              orderPoint: screenPoint,
-              targetId: decision.targetId,
-              orderRadius: ADVANCE_RADIUS,
-              orderLeashRadius: WARRIOR_ADVANCE_LEASH,
-              preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
-            }
-          : {
-              mode: 'advance',
-              orderPoint: supportPoint,
-              targetId: decision.targetId,
-              orderRadius: ADVANCE_RADIUS - 35,
-              orderLeashRadius: ARCHER_ADVANCE_LEASH,
-            };
-
-      this.applyOrder(ally, spec);
-      ally.state.targetId = spec.targetId;
-    }
-  }
-
-  private executeFocus(decision: HeroDecision, context: RoleExecutionContext): void {
-    const focusTarget =
-      context.focusTarget ??
-      this.findNearestToPoint(decision.moveTo ?? context.hero.state.position, context.enemies);
-    const anchor = focusTarget?.state.position ?? decision.moveTo ?? context.hero.state.position;
-    const screenPoint = this.getScreenPoint(anchor, context, 40);
-    const supportPoint = this.getSupportPoint(anchor, context, 76);
-
-    for (const ally of context.allies) {
-      const spec: RoleOrderSpec =
-        ally.state.role === 'warrior'
-          ? {
-              mode: 'focus',
-              orderPoint: screenPoint,
-              targetId: focusTarget?.id,
-              orderRadius: FOCUS_RADIUS,
-              orderLeashRadius: WARRIOR_FOCUS_LEASH,
-              preferredTargetRole:
-                focusTarget?.state.role === 'archer' || context.nearestEnemyArcher
-                  ? 'archer'
-                  : undefined,
-            }
-          : {
-              mode: 'focus',
-              orderPoint: supportPoint,
-              targetId: focusTarget?.id,
-              orderRadius: FOCUS_RADIUS - 55,
-              orderLeashRadius: ARCHER_FOCUS_LEASH,
-            };
-
-      this.applyOrder(ally, spec);
-      ally.state.targetId = spec.targetId;
-    }
-  }
-
-  private executeProtect(decision: HeroDecision, context: RoleExecutionContext): void {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-    const screenPoint = this.getScreenPoint(anchor, context);
-    const supportPoint = this.getSupportPoint(anchor, context, 54);
-    const nearestThreat = this.findNearestToPoint(anchor, context.enemies);
-
-    for (const ally of context.allies) {
-      const spec: RoleOrderSpec =
-        ally.state.role === 'warrior'
-          ? {
-              mode: 'protect',
-              orderPoint: screenPoint,
-              targetId: nearestThreat?.id,
-              orderRadius: PROTECT_RADIUS,
-              orderLeashRadius: WARRIOR_PROTECT_LEASH,
-              preferredTargetRole: nearestThreat?.state.role,
-            }
-          : {
-              mode: 'protect',
-              orderPoint: supportPoint,
-              orderRadius: PROTECT_RADIUS - 30,
-              orderLeashRadius: ARCHER_PROTECT_LEASH,
-            };
-
-      this.applyOrder(ally, spec);
-      ally.state.targetId = spec.targetId;
-    }
-  }
-
-  private executeRetreat(decision: HeroDecision, context: RoleExecutionContext): void {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-    const rearGuardPoint = this.getScreenPoint(anchor, context, 20);
-    const fallbackPoint = this.getSupportPoint(anchor, context, 72);
-
-    for (const ally of context.allies) {
-      const spec: RoleOrderSpec =
-        ally.state.role === 'warrior'
-          ? {
-              mode: 'retreat',
-              orderPoint: rearGuardPoint,
-              orderRadius: RETREAT_RADIUS + 15,
-              orderLeashRadius: WARRIOR_RETREAT_LEASH,
-            }
-          : {
-              mode: 'retreat',
-              orderPoint: fallbackPoint,
-              orderRadius: RETREAT_RADIUS,
-              orderLeashRadius: ARCHER_RETREAT_LEASH,
-            };
-
-      this.applyOrder(ally, spec);
-      ally.state.targetId = undefined;
-    }
-  }
-
-  private executeHold(decision: HeroDecision, context: RoleExecutionContext): void {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-    const screenPoint = this.getScreenPoint(anchor, context);
-    const supportPoint = this.getSupportPoint(anchor, context);
-
-    for (const ally of context.allies) {
-      const spec: RoleOrderSpec =
-        ally.state.role === 'warrior'
-          ? {
-              mode: 'hold',
-              orderPoint: screenPoint,
-              orderRadius: HOLD_RADIUS + 24,
-              orderLeashRadius: WARRIOR_HOLD_LEASH,
-              preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
-            }
-          : {
-              mode: 'hold',
-              orderPoint: supportPoint,
-              orderRadius: HOLD_RADIUS - 20,
-              orderLeashRadius: ARCHER_HOLD_LEASH,
-            };
-
-      this.applyOrder(ally, spec);
-      ally.state.targetId = undefined;
-    }
-  }
-
-  private buildHeroAdvanceSpec(
+  private buildSpecForUnit(
     decision: HeroDecision,
-    context: RoleExecutionContext
-  ): RoleOrderSpec {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-    const point = this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET);
+    context: RoleExecutionContext,
+    unit: Unit
+  ): RoleOrderSpec | undefined {
+    const anchor =
+      decision.intent === 'focus_enemy'
+        ? context.focusTarget?.state.tile ??
+          decision.moveToTile ??
+          context.nearestEnemyToAnchor?.state.tile ??
+          context.allyCenter
+        : decision.moveToTile ?? context.allyCenter;
 
-    return {
-      mode: 'advance',
-      orderPoint: point,
-      targetId: decision.targetId,
-      orderRadius: ADVANCE_RADIUS - 30,
-      orderLeashRadius: HERO_ADVANCE_LEASH,
-      preferredTargetRole:
-        context.nearestEnemyArcher ? 'archer' : context.focusTarget?.state.role,
-    };
+    const isHero = unit.state.role === 'hero';
+    const role = unit.state.role;
+
+    switch (decision.intent) {
+      case 'advance_to_point':
+        return {
+          mode: 'advance',
+          anchorTile: anchor,
+          targetId: decision.targetId,
+          orderRadiusPx: role === 'archer' ? ADVANCE_RADIUS - 35 : ADVANCE_RADIUS,
+          leashRadiusPx: isHero
+            ? HERO_ADVANCE_LEASH
+            : role === 'warrior'
+              ? WARRIOR_ADVANCE_LEASH
+              : ARCHER_ADVANCE_LEASH,
+          preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
+        };
+
+      case 'focus_enemy':
+        return {
+          mode: 'focus',
+          anchorTile: anchor,
+          targetId: context.focusTarget?.id ?? decision.targetId,
+          orderRadiusPx: role === 'archer' ? FOCUS_RADIUS - 55 : FOCUS_RADIUS,
+          leashRadiusPx: isHero
+            ? HERO_FOCUS_LEASH
+            : role === 'warrior'
+              ? WARRIOR_FOCUS_LEASH
+              : ARCHER_FOCUS_LEASH,
+          preferredTargetRole:
+            context.focusTarget?.state.role ??
+            (context.nearestEnemyArcher ? 'archer' : undefined),
+        };
+
+      case 'protect_target':
+        return {
+          mode: 'protect',
+          anchorTile: decision.moveToTile ?? context.hero.state.tile,
+          targetId: context.nearestEnemyToAnchor?.id,
+          orderRadiusPx: role === 'archer' ? PROTECT_RADIUS - 30 : PROTECT_RADIUS,
+          leashRadiusPx: isHero
+            ? HERO_PROTECT_LEASH
+            : role === 'warrior'
+              ? WARRIOR_PROTECT_LEASH
+              : ARCHER_PROTECT_LEASH,
+          preferredTargetRole: context.nearestEnemyToAnchor?.state.role,
+        };
+
+      case 'retreat_to_point':
+        return {
+          mode: 'retreat',
+          anchorTile: decision.moveToTile ?? context.hero.state.tile,
+          orderRadiusPx: role === 'warrior' ? RETREAT_RADIUS + 15 : RETREAT_RADIUS,
+          leashRadiusPx: isHero
+            ? HERO_RETREAT_LEASH
+            : role === 'warrior'
+              ? WARRIOR_RETREAT_LEASH
+              : ARCHER_RETREAT_LEASH,
+        };
+
+      case 'hold_position':
+        return {
+          mode: 'hold',
+          anchorTile: decision.moveToTile ?? context.hero.state.tile,
+          orderRadiusPx: role === 'warrior' ? HOLD_RADIUS + 24 : HOLD_RADIUS - 20,
+          leashRadiusPx: isHero
+            ? HERO_HOLD_LEASH
+            : role === 'warrior'
+              ? WARRIOR_HOLD_LEASH
+              : ARCHER_HOLD_LEASH,
+          preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
+        };
+
+      case 'use_skill':
+        return undefined;
+    }
   }
 
-  private buildHeroFocusSpec(decision: HeroDecision, context: RoleExecutionContext): RoleOrderSpec {
-    const focusTarget =
-      context.focusTarget ??
-      this.findNearestToPoint(decision.moveTo ?? context.hero.state.position, context.enemies);
-    const anchor = focusTarget?.state.position ?? decision.moveTo ?? context.hero.state.position;
+  private assignFormationTile(
+    anchorTile: TileCoord,
+    context: RoleExecutionContext,
+    unit: Unit,
+    formationUnits: Unit[],
+    claimed = new Set<string>()
+  ): TileCoord {
+    if (!this.battleGrid) {
+      return anchorTile;
+    }
 
-    return {
-      mode: 'focus',
-      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET),
-      targetId: focusTarget?.id,
-      orderRadius: FOCUS_RADIUS - 40,
-      orderLeashRadius: HERO_FOCUS_LEASH,
-      preferredTargetRole: focusTarget?.state.role ?? (context.nearestEnemyArcher ? 'archer' : undefined),
-    };
+    const forward = this.getForwardVector(anchorTile, context);
+    const right = { col: -forward.row, row: forward.col };
+    const template =
+      unit.state.role === 'warrior'
+        ? WARRIOR_TEMPLATE
+        : unit.state.role === 'archer'
+          ? ARCHER_TEMPLATE
+          : HERO_TEMPLATE;
+
+    const otherAllies = formationUnits.filter((ally) => ally.id !== unit.id);
+    const occupiedTiles = otherAllies.map((ally) => ally.state.tile);
+    const scoredCandidates: Array<{ tile: TileCoord; cost: number }> = [];
+
+    for (const offset of template) {
+      const candidate = this.battleGrid.findNearestWalkableTile({
+        col: anchorTile.col + forward.col * offset.forward + right.col * offset.side,
+        row: anchorTile.row + forward.row * offset.forward + right.row * offset.side,
+      });
+      const key = this.battleGrid.tileKey(candidate);
+      if (claimed.has(key)) {
+        continue;
+      }
+
+      const cost = this.battleGrid.estimatePathCost(unit.state.tile, candidate, {
+        occupiedTiles,
+      });
+      scoredCandidates.push({ tile: candidate, cost });
+    }
+
+    scoredCandidates.sort((a, b) => {
+      if (a.cost !== b.cost) {
+        return a.cost - b.cost;
+      }
+      if (a.tile.row !== b.tile.row) {
+        return a.tile.row - b.tile.row;
+      }
+      return a.tile.col - b.tile.col;
+    });
+
+    const selected = scoredCandidates[0]?.tile ?? this.battleGrid.findNearestWalkableTile(anchorTile);
+    claimed.add(this.battleGrid.tileKey(selected));
+    return selected;
   }
 
-  private buildHeroProtectSpec(
-    decision: HeroDecision,
-    context: RoleExecutionContext
-  ): RoleOrderSpec {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-    const nearestThreat = this.findNearestToPoint(anchor, context.enemies);
+  private getForwardVector(anchorTile: TileCoord, context: RoleExecutionContext): TileCoord {
+    const threatTile = context.focusTarget?.state.tile ?? context.enemyCenter;
+    if (!threatTile) {
+      return { col: 1, row: 0 };
+    }
 
-    return {
-      mode: 'protect',
-      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET - 8),
-      targetId: nearestThreat?.id,
-      orderRadius: PROTECT_RADIUS - 10,
-      orderLeashRadius: HERO_PROTECT_LEASH,
-      preferredTargetRole: nearestThreat?.state.role,
-    };
+    const dx = Math.sign(threatTile.col - anchorTile.col);
+    const dy = Math.sign(threatTile.row - anchorTile.row);
+    if (dx === 0 && dy === 0) {
+      return { col: 1, row: 0 };
+    }
+    return { col: dx, row: dy };
   }
 
-  private buildHeroRetreatSpec(
-    decision: HeroDecision,
-    context: RoleExecutionContext
-  ): RoleOrderSpec {
-    const anchor = decision.moveTo ?? context.hero.state.position;
+  private applyOrder(unit: Unit, spec: RoleOrderSpec, orderTile: TileCoord): void {
+    if (!this.battleGrid) {
+      return;
+    }
 
-    return {
-      mode: 'retreat',
-      orderPoint: this.getSupportPoint(anchor, context, 40),
-      orderRadius: RETREAT_RADIUS,
-      orderLeashRadius: HERO_RETREAT_LEASH,
-    };
-  }
-
-  private buildHeroHoldSpec(decision: HeroDecision, context: RoleExecutionContext): RoleOrderSpec {
-    const anchor = decision.moveTo ?? context.hero.state.position;
-
-    return {
-      mode: 'hold',
-      orderPoint: this.getScreenPoint(anchor, context, HERO_FRONT_OFFSET - 10),
-      orderRadius: HOLD_RADIUS,
-      orderLeashRadius: HERO_HOLD_LEASH,
-      preferredTargetRole: context.nearestEnemyArcher ? 'archer' : undefined,
-    };
-  }
-
-  private applyOrder(unit: Unit, spec: RoleOrderSpec): void {
     unit.state.orderMode = spec.mode;
-    unit.state.orderPoint = { ...spec.orderPoint };
+    unit.state.orderTile = { ...orderTile };
     unit.state.orderTargetId = spec.targetId;
-    unit.state.orderRadius = spec.orderRadius;
-    unit.state.orderLeashRadius = spec.orderLeashRadius;
+    unit.state.orderRadiusTiles = this.battleGrid.pixelsToRadiusTiles(spec.orderRadiusPx);
+    unit.state.orderLeashTiles = this.battleGrid.pixelsToRadiusTiles(spec.leashRadiusPx);
     unit.state.orderPreferredTargetRole = spec.preferredTargetRole;
   }
 
-  private getScreenPoint(
-    anchor: Position,
-    context: RoleExecutionContext,
-    distance = WARRIOR_FRONT_OFFSET
-  ): Position {
-    const threat = context.focusTarget?.state.position ?? context.enemyCenter;
-    return threat ? this.projectPoint(anchor, threat, distance) : { ...anchor };
-  }
-
-  private getSupportPoint(
-    anchor: Position,
-    context: RoleExecutionContext,
-    distance = ARCHER_REAR_OFFSET
-  ): Position {
-    const threat = context.focusTarget?.state.position ?? context.enemyCenter;
-    return threat ? this.projectPoint(anchor, threat, -distance) : { ...anchor };
-  }
-
-  private findNearestEnemyByRole(
-    point: Position,
-    enemies: Unit[],
-    role: UnitRole
-  ): Unit | undefined {
+  private findNearestEnemyByRole(point: TileCoord, enemies: Unit[], role: UnitRole): Unit | undefined {
     return this.findNearestToPoint(
       point,
       enemies.filter((enemy) => enemy.state.role === role)
     );
   }
 
-  private clusterCenter(units: Unit[]): Position {
-    if (units.length === 0) {
-      return { x: 512, y: 384 };
+  private clusterCenter(units: Unit[]): TileCoord {
+    if (!this.battleGrid || units.length === 0) {
+      return { col: 0, row: 0 };
     }
 
-    let sumX = 0;
-    let sumY = 0;
+    let sumCol = 0;
+    let sumRow = 0;
     for (const unit of units) {
-      sumX += unit.state.position.x;
-      sumY += unit.state.position.y;
+      sumCol += unit.state.tile.col;
+      sumRow += unit.state.tile.row;
     }
 
-    return {
-      x: sumX / units.length,
-      y: sumY / units.length,
-    };
+    return this.battleGrid.findNearestWalkableTile({
+      col: Math.round(sumCol / units.length),
+      row: Math.round(sumRow / units.length),
+    });
   }
 
-  private findNearestToPoint(point: Position, enemies: Unit[]): Unit | undefined {
+  private findNearestToPoint(point: TileCoord, enemies: Unit[]): Unit | undefined {
+    if (!this.battleGrid) {
+      return undefined;
+    }
+
     let nearest: Unit | undefined;
     let nearestDistance = Infinity;
-
     for (const enemy of enemies) {
-      const distance = Math.hypot(
-        enemy.state.position.x - point.x,
-        enemy.state.position.y - point.y
-      );
+      const distance = this.battleGrid.distance(point, enemy.state.tile);
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearest = enemy;
@@ -508,21 +494,6 @@ export class IntentExecutor {
     }
 
     return nearest;
-  }
-
-  private projectPoint(from: Position, toward: Position, distance: number): Position {
-    const dx = toward.x - from.x;
-    const dy = toward.y - from.y;
-    const length = Math.hypot(dx, dy);
-
-    if (length < 1) {
-      return { ...from };
-    }
-
-    return {
-      x: this.clamp(from.x + (dx / length) * distance, MAP_PADDING, MAP_WIDTH - MAP_PADDING),
-      y: this.clamp(from.y + (dy / length) * distance, MAP_PADDING, MAP_HEIGHT - MAP_PADDING),
-    };
   }
 
   private sortGroupOrders(groupOrders: GroupOrder[] | undefined): GroupOrder[] {
@@ -556,7 +527,7 @@ export class IntentExecutor {
   private stripGroupOrders(decision: HeroDecision): HeroDecision {
     return {
       ...decision,
-      moveTo: decision.moveTo ? { ...decision.moveTo } : undefined,
+      moveToTile: decision.moveToTile ? { ...decision.moveToTile } : undefined,
       groupOrders: undefined,
     };
   }
@@ -565,15 +536,11 @@ export class IntentExecutor {
     return {
       intent: groupOrder.intent,
       targetId: groupOrder.targetId,
-      moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
+      moveToTile: groupOrder.moveToTile ? { ...groupOrder.moveToTile } : undefined,
       skillId: undefined,
       priority: baseDecision.priority,
       rationaleTag: `${baseDecision.rationaleTag}_${groupOrder.group}`,
       recheckInSec: baseDecision.recheckInSec,
     };
-  }
-
-  private clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
   }
 }

@@ -2,7 +2,14 @@ import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { BattleLoop, BattleMapLayout, PlaygroundTargetConfig } from '../systems/BattleLoop';
 import { Obstacle } from '../systems/Obstacles';
-import { BattleResult, BattleMode, BattleSummaryData, Position, UnitRole, PlayerChatMessageEvent } from '../types';
+import {
+  BattleResult,
+  BattleMode,
+  BattleSummaryData,
+  Position,
+  UnitRole,
+  PlayerChatMessageEvent,
+} from '../types';
 import {
   createGroundTilemapLayer,
   getObjectLayerObjects,
@@ -175,6 +182,14 @@ export class BattleScene extends Scene {
       this.cameras.main.setBackgroundColor(mode === 'playground' ? '#2f4f5b' : '#3a6436');
       const map = createGroundTilemapLayer(this, mapKey, -22);
       const layout: BattleMapLayout = {
+        mapSummary: {
+          cols: map.width,
+          rows: map.height,
+          tileWidth: map.tileWidth,
+          tileHeight: map.tileHeight,
+          worldWidth: map.widthInPixels,
+          worldHeight: map.heightInPixels,
+        },
         obstacles: this.parseObstacles(map),
         heroSpawn: this.parseSingleSpawn(map, 'hero_spawn'),
         alliedSpawns: this.parseSpawnGroup(map, 'ally_spawn'),
@@ -294,6 +309,11 @@ export class BattleScene extends Scene {
       return null;
     }
 
-    return { x: object.x, y: object.y };
+    const width = typeof object.width === 'number' ? object.width : 0;
+    const height = typeof object.height === 'number' ? object.height : 0;
+    return {
+      x: object.x + width / 2,
+      y: object.y + height / 2,
+    };
   }
 }

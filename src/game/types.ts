@@ -4,6 +4,30 @@ export interface Position {
   y: number;
 }
 
+export interface TileCoord {
+  col: number;
+  row: number;
+}
+
+export interface BattleTacticalAnchor {
+  id: string;
+  name: string;
+  tile: TileCoord;
+}
+
+export interface BattleGridSummary {
+  cols: number;
+  rows: number;
+  tileWidth: number;
+  tileHeight: number;
+  worldWidth: number;
+  worldHeight: number;
+  blockedTiles: TileCoord[];
+  tacticalAnchors: BattleTacticalAnchor[];
+}
+
+export type BattleGridConfig = Omit<BattleGridSummary, 'blockedTiles' | 'tacticalAnchors'>;
+
 // Unit types
 export type UnitFaction = 'allied' | 'enemy';
 export type UnitRole = 'warrior' | 'archer' | 'hero';
@@ -26,6 +50,7 @@ export interface UnitState {
   role: UnitRole;
   displayName?: string;
   assignedHeroId?: string;
+  tile: TileCoord;
   position: Position;
   hp: number;
   maxHp: number;
@@ -37,11 +62,15 @@ export interface UnitState {
   isPassive?: boolean;
   isInvulnerable?: boolean;
   orderMode?: UnitOrderMode;
-  orderPoint?: Position;
+  orderTile?: TileCoord;
   orderTargetId?: string;
-  orderRadius?: number;
-  orderLeashRadius?: number;
+  orderRadiusTiles?: number;
+  orderLeashTiles?: number;
   orderPreferredTargetRole?: UnitRole;
+  pathTiles?: TileCoord[];
+  nextTile?: TileCoord;
+  reservedNextTile?: TileCoord;
+  stepProgress?: number;
   state: UnitAnimState;
 }
 
@@ -65,6 +94,7 @@ export interface HeroState {
   id: string;
   name: string;
   combatUnitId: string;
+  tile: TileCoord;
   position: Position;
   currentDirective?: string;
   currentDecision?: HeroDecision;
@@ -92,13 +122,13 @@ export interface GroupOrder {
   group: UnitGroup;
   intent: IntentType;
   targetId?: string;
-  moveTo?: Position;
+  moveToTile?: TileCoord;
 }
 
 export interface HeroDecision {
   intent: IntentType;
   targetId?: string;
-  moveTo?: Position;
+  moveToTile?: TileCoord;
   skillId?: string;
   groupOrders?: GroupOrder[];
   groupOrderMode?: 'override' | 'explicit_only';
@@ -129,6 +159,7 @@ export interface BattleObstacle {
 
 export interface HeroSummary {
   mode: BattleMode;
+  grid: BattleGridSummary;
   heroState: HeroState;
   heroUnit?: UnitState;
   currentDirective?: string;
@@ -146,6 +177,7 @@ export type BattlePhase = 'init' | 'active' | 'ended';
 
 export interface BattleState {
   mode: BattleMode;
+  grid: BattleGridSummary;
   timeSec: number;
   phase: BattlePhase;
   alliedUnits: UnitState[];

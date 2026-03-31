@@ -1,10 +1,10 @@
 import { IHeroDecisionProvider } from './HeroDecisionProvider';
-import { HeroSummary, HeroDecision, GroupOrder } from '../types';
-import { LLMClient, ChatMessage, LLMRawDecision, LLMGroupOrder } from './LLMClient';
+import { GroupOrder, HeroDecision, HeroSummary } from '../types';
+import { ChatMessage, LLMClient, LLMGroupOrder, LLMRawDecision } from './LLMClient';
 import { buildHeroSystemPrompt } from './heroPrompts';
 import { buildContextPrompt } from './contextBuilder';
 import { LocalRuleBasedHeroBrain } from './LocalRuleBasedHeroBrain';
-import { OLLAMA_CONFIG, AI_CONFIG } from './config';
+import { AI_CONFIG, OLLAMA_CONFIG } from './config';
 import { BattleVocabulary } from './BattleVocabulary';
 import {
   TacticalPositionMenuResult,
@@ -26,20 +26,12 @@ const FALLBACK_DECISION: HeroDecision = {
   recheckInSec: 2,
 };
 
-/**
- * LLM-powered hero brain using Ollama with structured outputs.
- * Now stateless per call (no conversation history).
- * Returns raw LLM decisions resolved to real IDs + coordinates.
- */
 export class OllamaHeroBrain implements IHeroDecisionProvider {
   private client: LLMClient;
   private fallback: LocalRuleBasedHeroBrain;
   private pending = false;
 
-  /** Shared vocabulary — set by the scheduler at battle start */
   vocabulary: BattleVocabulary = new BattleVocabulary();
-
-  /** Debug info from the last LLM call */
   lastLatencyMs = 0;
   fallbackCount = 0;
   llmCallCount = 0;
@@ -53,15 +45,10 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     this.fallback = new LocalRuleBasedHeroBrain();
   }
 
-  /** Sync decide — returns fallback decision. Used by IHeroDecisionProvider. */
   decide(summary: HeroSummary): HeroDecision {
     return this.fallback.decide(summary);
   }
 
-  /**
-   * Async decide — sends to Ollama, returns resolved decision + chat response.
-   * Each call is stateless (no conversation history).
-   */
   async decideAsync(
     summary: HeroSummary,
     playerMessage?: string,
@@ -84,10 +71,7 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         throw new Error('Ollama unavailable');
       }
 
-      // Build position menu for this decision cycle
       const positionMenu = buildTacticalPositionMenu(summary);
-
-      // Build prompts
       const systemPrompt = buildHeroSystemPrompt(summary.heroState);
       const contextPrompt = buildContextPrompt(
         summary,
@@ -97,7 +81,6 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
         terrainDescription
       );
 
-      // Stateless: system + single user message (no history)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: contextPrompt },
@@ -107,25 +90,18 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
       const response = await this.client.chat(messages);
       this.lastLatencyMs = performance.now() - start;
       this.llmCallCount++;
-
-      // Resolve the raw LLM output to a real HeroDecision
-      const decision = this.resolveRawDecision(
-        response.raw,
-        summary,
-        positionMenu
-      );
+      const decision = this.resolveRawDecision(response.raw, summary, positionMenu);
 
       return {
         decision,
-        chatResponse: response.chatResponse,
+        chatResponse: this.normalizeChatResponse(response.chatResponse, decision),
         positionMenu,
         vocabulary: this.vocabulary,
       };
     } catch {
       this.fallbackCount++;
-      const fallbackDecision = this.fallback.decide(summary);
       return {
-        decision: fallbackDecision,
+        decision: this.fallback.decide(summary),
         chatResponse: '',
         positionMenu: buildTacticalPositionMenu(summary),
         vocabulary: this.vocabulary,
@@ -135,7 +111,6 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     }
   }
 
-  /** Start periodic health checks */
   startHealthChecks(): () => void {
     const interval = setInterval(() => {
       this.client.healthCheck();
@@ -143,61 +118,40 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     return () => clearInterval(interval);
   }
 
-  /** Reset stats between battles */
   resetConversation(): void {
     this.lastLatencyMs = 0;
     this.fallbackCount = 0;
     this.llmCallCount = 0;
   }
 
-  /**
-   * Resolve raw LLM output (nicknames + letters) into a real HeroDecision (IDs + coordinates).
-   */
   private resolveRawDecision(
     raw: LLMRawDecision,
     summary: HeroSummary,
     positionMenu: TacticalPositionMenuResult
   ): HeroDecision {
-    const heroPos = summary.heroState.position;
+    const targetId = raw.targetName ? this.vocabulary.resolveNickname(raw.targetName) : undefined;
+    const moveToTile = raw.moveOption ? resolveMoveOption(positionMenu, raw.moveOption) : undefined;
+    const resolvedMoveToTile =
+      !moveToTile && targetId && raw.intent === 'focus_enemy'
+        ? this.findUnitTile(targetId, summary)
+        : moveToTile;
 
-    // Resolve targetName → targetId
-    const targetId = raw.targetName
-      ? this.vocabulary.resolveNickname(raw.targetName)
-      : undefined;
-
-    // Resolve moveOption → moveTo coordinates
-    const moveTo = raw.moveOption
-      ? resolveMoveOption(positionMenu, raw.moveOption, heroPos)
-      : undefined;
-
-    // If focus_enemy with a target but no moveTo, point at the target's position
-    const resolvedMoveTo =
-      !moveTo && targetId && raw.intent === 'focus_enemy'
-        ? this.findUnitPosition(targetId, summary)
-        : moveTo;
-
-    // Resolve group orders
     const groupOrders = raw.groupOrders
       ? this.resolveGroupOrders(raw.groupOrders, summary, positionMenu)
       : undefined;
 
-    // Compute recheckInSec deterministically from traits
     const traits = summary.heroState.traits;
     const recheckInSec =
       AI_CONFIG.recheckInterval.base + (1 - traits.decisiveness) * AI_CONFIG.recheckInterval.scale;
 
-    const rationaleTag = groupOrders?.length
-      ? 'llm_group_orders'
-      : `llm_${raw.intent}`;
-
     return {
       intent: raw.intent,
       targetId,
-      moveTo: resolvedMoveTo,
+      moveToTile: resolvedMoveToTile,
       skillId: undefined,
       groupOrders,
       priority: raw.priority,
-      rationaleTag,
+      rationaleTag: groupOrders?.length ? 'llm_group_orders' : `llm_${raw.intent}`,
       recheckInSec,
     };
   }
@@ -207,40 +161,78 @@ export class OllamaHeroBrain implements IHeroDecisionProvider {
     summary: HeroSummary,
     positionMenu: TacticalPositionMenuResult
   ): GroupOrder[] | undefined {
-    const heroPos = summary.heroState.position;
-    const resolved: GroupOrder[] = [];
+    const resolved = new Map<string, GroupOrder>();
 
-    for (const go of rawOrders) {
-      const targetId = go.targetName
-        ? this.vocabulary.resolveNickname(go.targetName)
+    for (const groupOrder of rawOrders) {
+      const targetId = groupOrder.targetName
+        ? this.vocabulary.resolveNickname(groupOrder.targetName)
         : undefined;
-      const moveTo = go.moveOption
-        ? resolveMoveOption(positionMenu, go.moveOption, heroPos)
+      const moveToTile = groupOrder.moveOption
+        ? resolveMoveOption(positionMenu, groupOrder.moveOption)
         : undefined;
+      const resolvedMoveToTile =
+        !moveToTile && targetId && groupOrder.intent === 'focus_enemy'
+          ? this.findUnitTile(targetId, summary)
+          : moveToTile;
 
-      // If focus with target but no position, use target's location
-      const resolvedMoveTo =
-        !moveTo && targetId && go.intent === 'focus_enemy'
-          ? this.findUnitPosition(targetId, summary)
-          : moveTo;
-
-      resolved.push({
-        group: go.group,
-        intent: go.intent,
+      resolved.set(groupOrder.group, {
+        group: groupOrder.group,
+        intent: groupOrder.intent,
         targetId,
-        moveTo: resolvedMoveTo,
+        moveToTile: resolvedMoveToTile,
       });
     }
 
-    return resolved.length > 0 ? resolved : undefined;
+    return resolved.size > 0 ? [...resolved.values()] : undefined;
   }
 
-  private findUnitPosition(
-    unitId: string,
-    summary: HeroSummary
-  ): { x: number; y: number } | undefined {
+  private findUnitTile(unitId: string, summary: HeroSummary) {
     const allUnits = [...summary.nearbyAllies, ...summary.nearbyEnemies];
-    const unit = allUnits.find((u) => u.id === unitId);
-    return unit ? { ...unit.position } : undefined;
+    const unit = allUnits.find((candidate) => candidate.id === unitId);
+    return unit ? { ...unit.tile } : undefined;
+  }
+
+  private normalizeChatResponse(chatResponse: string, decision: HeroDecision): string {
+    const trimmed = chatResponse.trim();
+    if (!trimmed) {
+      return trimmed;
+    }
+
+    if (decision.groupOrders?.length || !this.mentionsSplitGroups(trimmed)) {
+      return trimmed;
+    }
+
+    return this.buildArmyOnlyAck(decision);
+  }
+
+  private mentionsSplitGroups(chatResponse: string): boolean {
+    return /(?:^|[.!?]\s*)warriors\b|(?:^|[.!?]\s*)archers\b|\bwarriors\b.*\barchers\b|\barchers\b.*\bwarriors\b/i.test(
+      chatResponse
+    );
+  }
+
+  private buildArmyOnlyAck(decision: HeroDecision): string {
+    const targetName = decision.targetId
+      ? this.vocabulary.getNickname(decision.targetId)
+      : undefined;
+
+    switch (decision.intent) {
+      case 'focus_enemy':
+        return targetName
+          ? `All together - break ${targetName}.`
+          : 'All together - break their line.';
+      case 'protect_target':
+        return targetName
+          ? `Close ranks and screen ${targetName}.`
+          : 'Close ranks and screen the line.';
+      case 'advance_to_point':
+        return 'Advance together and keep formation.';
+      case 'retreat_to_point':
+        return 'Fall back together and regroup.';
+      case 'hold_position':
+        return 'Hold together and wait for the opening.';
+      case 'use_skill':
+        return 'Stay with me and press the action.';
+    }
   }
 }

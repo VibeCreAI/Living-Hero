@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { EventBus } from '../../../../game/EventBus';
-import { BattleState, GroupOrder, HeroDecision, Position, UnitGroup } from '../../../../game/types';
+import { BattleState, GroupOrder, HeroDecision, TileCoord, UnitGroup } from '../../../../game/types';
 
 interface DecisionEntry {
   timeSec: number;
@@ -184,8 +184,8 @@ function formatGroupOrder(groupOrder: GroupOrder, unitLookup: Map<string, string
 
 function formatPlan(
   decision:
-    | Pick<HeroDecision, 'intent' | 'targetId' | 'moveTo' | 'groupOrders' | 'groupOrderMode'>
-    | Pick<GroupOrder, 'group' | 'intent' | 'targetId' | 'moveTo'>,
+    | Pick<HeroDecision, 'intent' | 'targetId' | 'moveToTile' | 'groupOrders' | 'groupOrderMode'>
+    | Pick<GroupOrder, 'group' | 'intent' | 'targetId' | 'moveToTile'>,
   unitLookup: Map<string, string>
 ): string {
   if ('group' in decision && decision.group === 'all') {
@@ -193,7 +193,7 @@ function formatPlan(
       {
         intent: decision.intent,
         targetId: decision.targetId,
-        moveTo: decision.moveTo,
+        moveToTile: decision.moveToTile,
       },
       unitLookup
     );
@@ -215,8 +215,8 @@ function formatPlan(
   if (decision.targetId) {
     parts.push(`target ${formatTarget(decision.targetId, unitLookup)}`);
   }
-  if (decision.moveTo) {
-    parts.push(`move ${formatPosition(decision.moveTo)}`);
+  if (decision.moveToTile) {
+    parts.push(`move ${formatTile(decision.moveToTile)}`);
   }
 
   return parts.join(' | ');
@@ -227,6 +227,6 @@ function formatTarget(targetId: string, unitLookup: Map<string, string>): string
   return label && label !== targetId ? `${label} [${targetId}]` : targetId;
 }
 
-function formatPosition(position: Position): string {
-  return `(${Math.round(position.x)}, ${Math.round(position.y)})`;
+function formatTile(tile: TileCoord): string {
+  return `[${tile.col}, ${tile.row}]`;
 }

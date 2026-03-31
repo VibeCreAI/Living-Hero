@@ -1,9 +1,19 @@
-import { BattleObstacle, GroupOrder, HeroDecision, HeroSummary, IntentType, Position } from '../types';
+import {
+  BattleObstacle,
+  GroupOrder,
+  HeroDecision,
+  HeroSummary,
+  IntentType,
+  Position,
+  TileCoord,
+} from '../types';
+import { tileToWorld } from './BattleVocabulary';
 
 export type TacticalIntent = 'advance' | 'hold' | 'protect' | 'retreat';
 
 export interface CoverAnchor {
   obstacle: BattleObstacle;
+  tile: TileCoord;
   position: Position;
   score: number;
   providesCover: boolean;
@@ -18,9 +28,7 @@ interface TacticalProfile {
   retreatDistanceWeight: number;
 }
 
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
-const MAP_PADDING = 28;
+const MAP_PADDING_TILES = 1;
 const COVER_SAMPLE_STEP = 10;
 const CORNER_OFFSET = 10;
 
@@ -63,7 +71,7 @@ export function resolveNamedObstacleAnchor(
   summary: HeroSummary,
   message: string,
   intent: TacticalIntent,
-  anchor: Position
+  anchorTile: TileCoord
 ): CoverAnchor | undefined {
   const lowerMessage = message.toLowerCase();
   let best: CoverAnchor | undefined;
@@ -77,7 +85,7 @@ export function resolveNamedObstacleAnchor(
       continue;
     }
 
-    const candidate = findBestPointAroundObstacle(summary, obstacle, intent, anchor);
+    const candidate = findBestPointAroundObstacle(summary, obstacle, intent, anchorTile);
     if (
       !best ||
       matchedAlias.length > bestAliasLength ||
@@ -94,7 +102,7 @@ export function resolveNamedObstacleAnchor(
 export function findBestCoverAnchor(
   summary: HeroSummary,
   intent: TacticalIntent,
-  anchor: Position
+  anchorTile: TileCoord
 ): CoverAnchor | undefined {
   if (summary.obstacles.length === 0) {
     return undefined;
@@ -102,7 +110,7 @@ export function findBestCoverAnchor(
 
   let best: CoverAnchor | undefined;
   for (const obstacle of summary.obstacles) {
-    const candidate = findBestPointAroundObstacle(summary, obstacle, intent, anchor);
+    const candidate = findBestPointAroundObstacle(summary, obstacle, intent, anchorTile);
     if (!best || candidate.score > best.score) {
       best = candidate;
     }
@@ -114,9 +122,9 @@ export function findBestCoverAnchor(
 export function chooseTacticalAnchor(
   summary: HeroSummary,
   intent: TacticalIntent,
-  anchor: Position
-): Position {
-  const baseAnchor = clampToMap(anchor);
+  anchorTile: TileCoord
+): TileCoord {
+  const baseAnchor = clampToGrid(anchorTile, summary);
   const bestCover = findBestCoverAnchor(summary, intent, baseAnchor);
   if (!bestCover) {
     return baseAnchor;
@@ -124,13 +132,17 @@ export function chooseTacticalAnchor(
 
   const rawScore = scoreTacticalPosition(summary, baseAnchor, intent, baseAnchor);
   const threshold = intent === 'advance' ? 6 : 10;
-  const rawCovered = isPointCovered(summary.obstacles, baseAnchor, getThreatPoint(summary));
+  const rawCovered = isPointCovered(
+    summary.obstacles,
+    tileToWorld(baseAnchor, summary.grid),
+    getThreatPoint(summary)
+  );
 
   if (
     bestCover.score >= rawScore + threshold ||
     (!rawCovered && bestCover.providesCover && bestCover.score > rawScore - 4)
   ) {
-    return { ...bestCover.position };
+    return { ...bestCover.tile };
   }
 
   return baseAnchor;
@@ -138,38 +150,39 @@ export function chooseTacticalAnchor(
 
 export function scoreTacticalPosition(
   summary: HeroSummary,
-  point: Position,
+  tile: TileCoord,
   intent: TacticalIntent,
-  anchor: Position
+  anchorTile: TileCoord
 ): number {
-  const clampedPoint = clampToMap(point);
+  const clampedTile = clampToGrid(tile, summary);
+  const point = tileToWorld(clampedTile, summary.grid);
+  const anchor = tileToWorld(anchorTile, summary.grid);
   const profile = PROFILES[intent];
   const threat = getThreatPoint(summary);
-  const allyCenter = clusterCenter(summary.nearbyAllies) ?? summary.heroState.position;
+  const allyCenter = clusterCenter(summary.nearbyAllies.map((ally) => ally.position)) ?? summary.heroState.position;
 
-  if (isInsideObstacle(clampedPoint, summary.obstacles)) {
+  if (isInsideObstacle(point, summary.obstacles)) {
     return -200;
   }
 
   let score = 0;
-  const covered = isPointCovered(summary.obstacles, clampedPoint, threat);
+  const covered = isPointCovered(summary.obstacles, point, threat);
   score += covered ? profile.coverBonus : -profile.exposedPenalty;
 
-  score -= dist(clampedPoint, anchor) * profile.anchorWeight;
-  score -= dist(clampedPoint, allyCenter) * profile.allyWeight;
+  score -= dist(point, anchor) * profile.anchorWeight;
+  score -= dist(point, allyCenter) * profile.allyWeight;
 
   if (threat) {
-    const threatDistance = dist(clampedPoint, threat);
+    const threatDistance = dist(point, threat);
     if (intent === 'retreat') {
       score += Math.min(threatDistance, 420) * profile.retreatDistanceWeight;
     } else {
       const desiredThreatDistance = getDesiredThreatDistance(summary, intent);
-      score -=
-        Math.abs(threatDistance - desiredThreatDistance) * profile.desiredThreatDistanceWeight;
+      score -= Math.abs(threatDistance - desiredThreatDistance) * profile.desiredThreatDistanceWeight;
     }
   }
 
-  const obstacleDistance = distanceToNearestObstacle(clampedPoint, summary.obstacles);
+  const obstacleDistance = distanceToNearestObstacle(point, summary.obstacles);
   score += Math.max(0, 60 - obstacleDistance) * 0.35;
 
   return score;
@@ -188,10 +201,10 @@ export function refineDecisionPositionForCover(
       return {
         ...decision,
         groupOrders: refinedGroupOrders,
-        moveTo: chooseTacticalAnchor(
+        moveToTile: chooseTacticalAnchor(
           summary,
           'hold',
-          decision.moveTo ?? summary.heroState.position
+          decision.moveToTile ?? summary.heroState.tile
         ),
       };
 
@@ -199,10 +212,12 @@ export function refineDecisionPositionForCover(
       return {
         ...decision,
         groupOrders: refinedGroupOrders,
-        moveTo: chooseTacticalAnchor(
+        moveToTile: chooseTacticalAnchor(
           summary,
           'protect',
-          decision.moveTo ?? clusterCenter(summary.nearbyAllies) ?? summary.heroState.position
+          decision.moveToTile ??
+            clusterCenterToTile(summary, summary.nearbyAllies.map((ally) => ally.position)) ??
+            summary.heroState.tile
         ),
       };
 
@@ -210,21 +225,21 @@ export function refineDecisionPositionForCover(
       return {
         ...decision,
         groupOrders: refinedGroupOrders,
-        moveTo: chooseTacticalAnchor(
+        moveToTile: chooseTacticalAnchor(
           summary,
           'retreat',
-          decision.moveTo ?? summary.heroState.position
+          decision.moveToTile ?? summary.heroState.tile
         ),
       };
 
     case 'advance_to_point':
-      if (!decision.moveTo) {
+      if (!decision.moveToTile) {
         return decision;
       }
       return {
         ...decision,
         groupOrders: refinedGroupOrders,
-        moveTo: chooseTacticalAnchor(summary, 'advance', decision.moveTo),
+        moveToTile: chooseTacticalAnchor(summary, 'advance', decision.moveToTile),
       };
 
     default:
@@ -240,13 +255,13 @@ function refineGroupOrderPositionForCover(
   groupOrder: GroupOrder
 ): GroupOrder {
   const tacticalIntent = toTacticalIntent(groupOrder.intent);
-  if (!groupOrder.moveTo || !tacticalIntent) {
+  if (!groupOrder.moveToTile || !tacticalIntent) {
     return groupOrder;
   }
 
   return {
     ...groupOrder,
-    moveTo: chooseTacticalAnchor(summary, tacticalIntent, groupOrder.moveTo),
+    moveToTile: chooseTacticalAnchor(summary, tacticalIntent, groupOrder.moveToTile),
   };
 }
 
@@ -254,11 +269,11 @@ export function findBestPointAroundObstacle(
   summary: HeroSummary,
   obstacle: BattleObstacle,
   intent: TacticalIntent,
-  anchor: Position
+  anchorTile: TileCoord
 ): CoverAnchor {
   const center = getObstacleCenter(obstacle);
   const offset = Math.max(36, Math.min(64, Math.max(obstacle.width, obstacle.height) * 0.5));
-  const candidates: Position[] = [
+  const candidatePoints: Position[] = [
     { x: obstacle.x - offset, y: center.y },
     { x: obstacle.x + obstacle.width + offset, y: center.y },
     { x: center.x, y: obstacle.y - offset },
@@ -270,41 +285,45 @@ export function findBestPointAroundObstacle(
       x: obstacle.x + obstacle.width + offset,
       y: obstacle.y + obstacle.height + offset - CORNER_OFFSET,
     },
-  ].map(clampToMap);
+  ];
 
   const threat = getThreatPoint(summary);
-  let bestPosition = clampToMap(anchor);
+  let bestTile = clampToGrid(anchorTile, summary);
   let bestScore = Number.NEGATIVE_INFINITY;
   let bestCover = false;
 
-  for (const candidate of dedupePositions(candidates)) {
-    let score = scoreTacticalPosition(summary, candidate, intent, anchor);
-    const shieldedByObstacle = threat
-      ? doesObstacleBlockLine(threat, candidate, obstacle)
-      : false;
+  for (const candidateTile of dedupeTiles(
+    candidatePoints.map((point) =>
+      clampToGrid(
+        worldToNearestTile(summary, point),
+        summary
+      )
+    )
+  )) {
+    const candidate = tileToWorld(candidateTile, summary.grid);
+    let score = scoreTacticalPosition(summary, candidateTile, intent, anchorTile);
+    const shieldedByObstacle = threat ? doesObstacleBlockLine(threat, candidate, obstacle) : false;
 
     score += shieldedByObstacle ? 20 : -12;
     score -= dist(candidate, center) * 0.04;
 
     if (score > bestScore) {
       bestScore = score;
-      bestPosition = candidate;
+      bestTile = candidateTile;
       bestCover = shieldedByObstacle;
     }
   }
 
   return {
     obstacle,
-    position: bestPosition,
+    tile: bestTile,
+    position: tileToWorld(bestTile, summary.grid),
     score: bestScore,
     providesCover: bestCover,
   };
 }
 
-function getObstacleAliases(
-  obstacle: BattleObstacle,
-  allObstacles: BattleObstacle[]
-): string[] {
+function getObstacleAliases(obstacle: BattleObstacle, allObstacles: BattleObstacle[]): string[] {
   const aliases = new Set<string>();
   const label = obstacle.label.toLowerCase();
   const idAlias = obstacle.id.toLowerCase().replace(/[-_]+/g, ' ');
@@ -402,25 +421,30 @@ function toTacticalIntent(intent: IntentType): TacticalIntent | null {
 }
 
 function getThreatPoint(summary: HeroSummary): Position | undefined {
-  return clusterCenter(summary.nearbyEnemies);
+  return clusterCenter(summary.nearbyEnemies.map((enemy) => enemy.position));
 }
 
-function clusterCenter(units: { position: Position }[]): Position | undefined {
-  if (units.length === 0) {
+function clusterCenter(points: Position[]): Position | undefined {
+  if (points.length === 0) {
     return undefined;
   }
 
   let sumX = 0;
   let sumY = 0;
-  for (const unit of units) {
-    sumX += unit.position.x;
-    sumY += unit.position.y;
+  for (const point of points) {
+    sumX += point.x;
+    sumY += point.y;
   }
 
   return {
-    x: sumX / units.length,
-    y: sumY / units.length,
+    x: sumX / points.length,
+    y: sumY / points.length,
   };
+}
+
+function clusterCenterToTile(summary: HeroSummary, points: Position[]): TileCoord | undefined {
+  const center = clusterCenter(points);
+  return center ? worldToNearestTile(summary, center) : undefined;
 }
 
 function getObstacleCenter(obstacle: BattleObstacle): Position {
@@ -430,27 +454,26 @@ function getObstacleCenter(obstacle: BattleObstacle): Position {
   };
 }
 
-function dedupePositions(points: Position[]): Position[] {
-  const seen = new Set<string>();
-  const unique: Position[] = [];
-
-  for (const point of points) {
-    const key = `${Math.round(point.x)}:${Math.round(point.y)}`;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    unique.push(point);
+function dedupeTiles(tiles: TileCoord[]): TileCoord[] {
+  const unique = new Map<string, TileCoord>();
+  for (const tile of tiles) {
+    unique.set(`${tile.col}:${tile.row}`, tile);
   }
-
-  return unique;
+  return [...unique.values()];
 }
 
-function clampToMap(point: Position): Position {
+function worldToNearestTile(summary: HeroSummary, point: Position): TileCoord {
+  const tile = {
+    col: Math.floor(point.x / summary.grid.tileWidth),
+    row: Math.floor(point.y / summary.grid.tileHeight),
+  };
+  return clampToGrid(tile, summary);
+}
+
+function clampToGrid(tile: TileCoord, summary: HeroSummary): TileCoord {
   return {
-    x: Math.min(MAP_WIDTH - MAP_PADDING, Math.max(MAP_PADDING, point.x)),
-    y: Math.min(MAP_HEIGHT - MAP_PADDING, Math.max(MAP_PADDING, point.y)),
+    col: Math.min(summary.grid.cols - MAP_PADDING_TILES, Math.max(MAP_PADDING_TILES, Math.round(tile.col))),
+    row: Math.min(summary.grid.rows - MAP_PADDING_TILES, Math.max(MAP_PADDING_TILES, Math.round(tile.row))),
   };
 }
 

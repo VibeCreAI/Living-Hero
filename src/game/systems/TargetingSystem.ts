@@ -1,22 +1,32 @@
 import { Unit } from '../entities/Unit';
-import { Position } from '../types';
+import { TileCoord } from '../types';
+import { BattleGrid } from './BattleGrid';
+import { ObstacleSystem } from './Obstacles';
 
-const HOLD_ENGAGE_BUFFER = 28;
-const ROLE_PREFERENCE_BONUS = 70;
-const ADVANCE_ARRIVAL_BUFFER = 20;
+const HOLD_ENGAGE_BUFFER_TILES = 1;
+const ROLE_PREFERENCE_BONUS = 3;
+const ADVANCE_ARRIVAL_BUFFER_TILES = 1;
 const ADVANCE_ARRIVAL_RADIUS_FACTOR = 0.45;
+const ENGAGE_LINE_OF_SIGHT_PADDING = 6;
 
 export class TargetingSystem {
+  private battleGrid: BattleGrid | null = null;
+  private obstacles: ObstacleSystem | null = null;
+
+  setBattleGrid(battleGrid: BattleGrid): void {
+    this.battleGrid = battleGrid;
+  }
+
+  setObstacles(obstacles: ObstacleSystem): void {
+    this.obstacles = obstacles;
+  }
+
   update(alliedUnits: Unit[], enemyUnits: Unit[]): void {
     this.assignTargets(alliedUnits, enemyUnits, true);
     this.assignTargets(enemyUnits, alliedUnits, false);
   }
 
-  private assignTargets(
-    units: Unit[],
-    opponents: Unit[],
-    obeyOrders: boolean
-  ): void {
+  private assignTargets(units: Unit[], opponents: Unit[], obeyOrders: boolean): void {
     const aliveOpponents = opponents.filter((opponent) => opponent.isAlive());
     if (aliveOpponents.length === 0) {
       return;
@@ -30,7 +40,11 @@ export class TargetingSystem {
       if (unit.state.targetId) {
         const currentTarget = opponents.find((opponent) => opponent.id === unit.state.targetId);
         if (currentTarget && currentTarget.isAlive()) {
-          if (!obeyOrders || this.isTargetAllowed(unit, currentTarget)) {
+          if (
+            !obeyOrders ||
+            this.isTargetAllowed(unit, currentTarget) ||
+            this.isOpportunityTarget(unit, currentTarget)
+          ) {
             continue;
           }
         }
@@ -41,6 +55,12 @@ export class TargetingSystem {
         const orderedTarget = this.getOrderedTarget(unit, aliveOpponents);
         if (orderedTarget) {
           unit.state.targetId = orderedTarget.id;
+          continue;
+        }
+
+        const opportunityTarget = this.getOpportunityTarget(unit, aliveOpponents);
+        if (opportunityTarget) {
+          unit.state.targetId = opportunityTarget.id;
           continue;
         }
 
@@ -60,8 +80,8 @@ export class TargetingSystem {
   private getOrderedTarget(unit: Unit, opponents: Unit[]): Unit | undefined {
     const orderMode = unit.state.orderMode;
     const orderTargetId = unit.state.orderTargetId;
-    const orderPoint = unit.state.orderPoint;
-    const orderRadius = unit.state.orderRadius ?? 0;
+    const orderTile = unit.state.orderTile;
+    const orderRadiusTiles = unit.state.orderRadiusTiles ?? 0;
 
     if (orderMode === 'focus' && orderTargetId) {
       const focusTarget = opponents.find((opponent) => opponent.id === orderTargetId);
@@ -72,11 +92,9 @@ export class TargetingSystem {
 
     if (orderMode === 'hold') {
       return this.findBestTarget(unit, opponents, (opponent) => {
-        const withinWeaponReach =
-          this.distance(unit.state.position, opponent.state.position) <=
-          unit.state.attackRange + HOLD_ENGAGE_BUFFER;
-        const withinHoldZone = orderPoint
-          ? this.distance(orderPoint, opponent.state.position) <= orderRadius
+        const withinWeaponReach = this.isWithinAttackReach(unit, opponent, HOLD_ENGAGE_BUFFER_TILES);
+        const withinHoldZone = orderTile
+          ? this.distance(orderTile, opponent.state.tile) <= orderRadiusTiles
           : false;
         return withinWeaponReach || withinHoldZone;
       });
@@ -84,8 +102,8 @@ export class TargetingSystem {
 
     if (orderMode === 'protect') {
       return this.findBestTarget(unit, opponents, (opponent) =>
-        orderPoint
-          ? this.distance(orderPoint, opponent.state.position) <= orderRadius &&
+        orderTile
+          ? this.distance(orderTile, opponent.state.tile) <= orderRadiusTiles &&
             this.isWithinPursuitEnvelope(unit, opponent)
           : false
       );
@@ -103,6 +121,11 @@ export class TargetingSystem {
         }
       }
 
+      const opportunityTarget = this.getOpportunityTarget(unit, opponents);
+      if (opportunityTarget) {
+        return opportunityTarget;
+      }
+
       if (!this.hasReachedAdvanceAnchor(unit)) {
         return undefined;
       }
@@ -116,27 +139,26 @@ export class TargetingSystem {
   }
 
   private shouldSuppressDefaultTargeting(unit: Unit): boolean {
-    if (
+    return (
       unit.state.orderMode === 'hold' ||
       unit.state.orderMode === 'protect' ||
       unit.state.orderMode === 'retreat' ||
       (unit.state.orderMode === 'advance' &&
         !unit.state.orderTargetId &&
         !this.hasReachedAdvanceAnchor(unit))
-    ) {
-      return true;
-    }
-
-    return false;
+    );
   }
 
   private isTargetAllowed(unit: Unit, target: Unit): boolean {
     const orderMode = unit.state.orderMode;
-    const orderPoint = unit.state.orderPoint;
-    const orderRadius = unit.state.orderRadius ?? 0;
+    const orderTile = unit.state.orderTile;
+    const orderRadiusTiles = unit.state.orderRadiusTiles ?? 0;
 
     if (orderMode === 'focus') {
-      return target.id === unit.state.orderTargetId && this.isWithinPursuitEnvelope(unit, target);
+      return (
+        (target.id === unit.state.orderTargetId && this.isWithinPursuitEnvelope(unit, target)) ||
+        this.isOpportunityTarget(unit, target)
+      );
     }
 
     if (orderMode === 'retreat') {
@@ -145,25 +167,26 @@ export class TargetingSystem {
 
     if (orderMode === 'hold') {
       return (
-        this.distance(unit.state.position, target.state.position) <=
-          unit.state.attackRange + HOLD_ENGAGE_BUFFER ||
-        (orderPoint
-          ? this.distance(orderPoint, target.state.position) <= orderRadius
-          : false)
+        this.isWithinAttackReach(unit, target, HOLD_ENGAGE_BUFFER_TILES) ||
+        (orderTile ? this.distance(orderTile, target.state.tile) <= orderRadiusTiles : false)
       );
     }
 
     if (orderMode === 'protect') {
-      return orderPoint
-        ? this.distance(orderPoint, target.state.position) <= orderRadius &&
+      return (
+        this.isOpportunityTarget(unit, target) ||
+        (orderTile
+          ? this.distance(orderTile, target.state.tile) <= orderRadiusTiles &&
             this.isWithinPursuitEnvelope(unit, target)
-        : false;
+          : false)
+      );
     }
 
     if (orderMode === 'advance') {
       return (
-        (Boolean(unit.state.orderTargetId) || this.hasReachedAdvanceAnchor(unit)) &&
-        this.isWithinPursuitEnvelope(unit, target)
+        this.isOpportunityTarget(unit, target) ||
+        ((Boolean(unit.state.orderTargetId) || this.hasReachedAdvanceAnchor(unit)) &&
+          this.isWithinPursuitEnvelope(unit, target))
       );
     }
 
@@ -184,10 +207,9 @@ export class TargetingSystem {
         continue;
       }
 
-      const distance = unit.distanceTo(opponent);
+      const distance = this.distance(unit.state.tile, opponent.state.tile);
       const score =
-        distance -
-        (preferredRole && opponent.state.role === preferredRole ? ROLE_PREFERENCE_BONUS : 0);
+        distance - (preferredRole && opponent.state.role === preferredRole ? ROLE_PREFERENCE_BONUS : 0);
       if (score < bestScore) {
         bestScore = score;
         best = opponent;
@@ -198,20 +220,19 @@ export class TargetingSystem {
   }
 
   private isWithinPursuitEnvelope(unit: Unit, target: Unit): boolean {
-    const orderPoint = unit.state.orderPoint;
-    const leashRadius = unit.state.orderLeashRadius;
+    const orderTile = unit.state.orderTile;
+    const leashTiles = unit.state.orderLeashTiles;
 
-    if (!orderPoint || !leashRadius) {
+    if (!orderTile || !leashTiles) {
       return true;
     }
 
-    const targetDistanceFromAnchor = this.distance(orderPoint, target.state.position);
-    if (targetDistanceFromAnchor <= leashRadius) {
+    const targetDistanceFromAnchor = this.distance(orderTile, target.state.tile);
+    if (targetDistanceFromAnchor <= leashTiles) {
       return true;
     }
 
-    return this.distance(unit.state.position, target.state.position) <=
-      unit.state.attackRange + HOLD_ENGAGE_BUFFER;
+    return this.isWithinAttackReach(unit, target, HOLD_ENGAGE_BUFFER_TILES);
   }
 
   private hasReachedAdvanceAnchor(unit: Unit): boolean {
@@ -219,20 +240,69 @@ export class TargetingSystem {
       return true;
     }
 
-    const orderPoint = unit.state.orderPoint;
-    if (!orderPoint) {
+    const orderTile = unit.state.orderTile;
+    if (!orderTile) {
       return true;
     }
 
-    const orderRadius = unit.state.orderRadius ?? 0;
+    const orderRadiusTiles = unit.state.orderRadiusTiles ?? 0;
     const arrivalRadius = Math.max(
-      ADVANCE_ARRIVAL_BUFFER,
-      orderRadius * ADVANCE_ARRIVAL_RADIUS_FACTOR
+      ADVANCE_ARRIVAL_BUFFER_TILES,
+      Math.ceil(orderRadiusTiles * ADVANCE_ARRIVAL_RADIUS_FACTOR)
     );
-    return this.distance(unit.state.position, orderPoint) <= arrivalRadius;
+    return this.distance(unit.state.tile, orderTile) <= arrivalRadius;
   }
 
-  private distance(a: Position, b: Position): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
+  private attackRangeTiles(unit: Unit): number {
+    if (!this.battleGrid) {
+      return 1;
+    }
+    return this.battleGrid.pixelsToAttackRangeTiles(unit.state.attackRange);
+  }
+
+  private getOpportunityTarget(unit: Unit, opponents: Unit[]): Unit | undefined {
+    if (unit.state.orderMode === 'retreat') {
+      return undefined;
+    }
+
+    return this.findBestTarget(unit, opponents, (opponent) => this.isOpportunityTarget(unit, opponent));
+  }
+
+  private isOpportunityTarget(unit: Unit, target: Unit): boolean {
+    return this.isWithinAttackReach(unit, target) && this.hasLineOfSight(unit, target);
+  }
+
+  private isWithinAttackReach(unit: Unit, target: Unit, extraTiles = 0): boolean {
+    const rangeTiles = this.attackRangeTiles(unit) + extraTiles;
+    if (this.battleGrid) {
+      return this.battleGrid.isWithinAttackRange(unit.state.tile, target.state.tile, rangeTiles);
+    }
+
+    const colDelta = Math.abs(unit.state.tile.col - target.state.tile.col);
+    const rowDelta = Math.abs(unit.state.tile.row - target.state.tile.row);
+    if (rangeTiles <= 1) {
+      return Math.max(colDelta, rowDelta) <= rangeTiles;
+    }
+
+    return Math.hypot(colDelta, rowDelta) <= rangeTiles;
+  }
+
+  private hasLineOfSight(unit: Unit, target: Unit): boolean {
+    if (!this.obstacles) {
+      return true;
+    }
+
+    return this.obstacles.hasLineOfSight(
+      unit.state.position,
+      target.state.position,
+      ENGAGE_LINE_OF_SIGHT_PADDING
+    );
+  }
+
+  private distance(a: TileCoord, b: TileCoord): number {
+    if (!this.battleGrid) {
+      return Math.hypot(a.col - b.col, a.row - b.row);
+    }
+    return this.battleGrid.distance(a, b);
   }
 }

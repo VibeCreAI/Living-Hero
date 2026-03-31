@@ -7,6 +7,7 @@ import {
   UnitFaction,
   DamageEvent,
   BattleObstacle,
+  BattleGridSummary,
 } from '../types';
 
 const RECENT_DAMAGE_WINDOW_SEC = 4;
@@ -17,6 +18,16 @@ export class BattleStateManager {
   constructor() {
     this.state = {
       mode: 'battle',
+      grid: {
+        cols: 1,
+        rows: 1,
+        tileWidth: 1,
+        tileHeight: 1,
+        worldWidth: 1,
+        worldHeight: 1,
+        blockedTiles: [],
+        tacticalAnchors: [],
+      },
       timeSec: 0,
       phase: 'init',
       alliedUnits: [],
@@ -32,10 +43,12 @@ export class BattleStateManager {
     enemyUnits: UnitState[],
     heroes: HeroState[],
     obstacles: BattleObstacle[],
+    grid: BattleGridSummary,
     mode: BattleMode = 'battle'
   ): void {
     this.state = {
       mode,
+      grid,
       timeSec: 0,
       phase: 'init',
       alliedUnits,

@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { Hero } from '../entities/Hero';
 import { Unit } from '../entities/Unit';
 import { DamageEvent, IntentType, UnitFaction } from '../types';
+import { BattleGrid } from './BattleGrid';
 
 const INTENT_COLORS: Record<IntentType, number> = {
   advance_to_point: 0xff6644,
@@ -24,6 +25,7 @@ const INTENT_LABELS: Record<IntentType, string> = {
 export class FeedbackOverlay {
   private graphics: Phaser.GameObjects.Graphics;
   private scene: Scene;
+  private battleGrid: BattleGrid | null = null;
   private floatingTexts = new Set<Phaser.GameObjects.Text>();
   private projectiles = new Set<Phaser.GameObjects.Image>();
 
@@ -33,6 +35,10 @@ export class FeedbackOverlay {
     this.graphics.setDepth(5);
     scene.textures.get('blue-archer-arrow')?.setFilter(Phaser.Textures.FilterMode.NEAREST);
     scene.textures.get('red-archer-arrow')?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  }
+
+  setGrid(battleGrid: BattleGrid): void {
+    this.battleGrid = battleGrid;
   }
 
   showDamageEvents(events: DamageEvent[], units: Unit[]): void {
@@ -74,18 +80,19 @@ export class FeedbackOverlay {
       hero.intentText.setText(label);
       hero.intentText.setColor(`#${color.toString(16).padStart(6, '0')}`);
 
-      if (decision.moveTo) {
+      if (decision.moveToTile && this.battleGrid) {
+        const moveTo = this.battleGrid.tileToWorld(decision.moveToTile);
         this.graphics.lineStyle(1.5, color, 0.4);
         this.graphics.beginPath();
         this.graphics.moveTo(hero.state.position.x, hero.state.position.y);
-        this.graphics.lineTo(decision.moveTo.x, decision.moveTo.y);
+        this.graphics.lineTo(moveTo.x, moveTo.y);
         this.graphics.strokePath();
 
         const radius = 18 + pulse * 8;
         this.graphics.lineStyle(2, color, 0.65);
-        this.graphics.strokeCircle(decision.moveTo.x, decision.moveTo.y, radius);
+        this.graphics.strokeCircle(moveTo.x, moveTo.y, radius);
         this.graphics.fillStyle(color, 0.12);
-        this.graphics.fillCircle(decision.moveTo.x, decision.moveTo.y, 10 + pulse * 3);
+        this.graphics.fillCircle(moveTo.x, moveTo.y, 10 + pulse * 3);
       }
 
       if (decision.targetId) {

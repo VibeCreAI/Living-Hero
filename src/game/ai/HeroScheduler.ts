@@ -9,6 +9,7 @@ import { EventBus } from '../EventBus';
 import { interpretPlayerMessage } from './PlayerMessageInterpreter';
 import { adaptReactiveDecision } from './DirectiveTactics';
 import { BattleVocabulary } from './BattleVocabulary';
+import { BattleGrid } from '../systems/BattleGrid';
 
 export class HeroScheduler {
   private decisionProvider: IHeroDecisionProvider;
@@ -35,6 +36,10 @@ export class HeroScheduler {
     this.decisionProvider = decisionProvider;
     this.ollamaBrain = ollamaBrain ?? null;
     this.intentExecutor = new IntentExecutor();
+  }
+
+  setBattleGrid(battleGrid: BattleGrid): void {
+    this.intentExecutor.setBattleGrid(battleGrid);
   }
 
   /** Initialize vocabulary with unit nicknames at battle start */
@@ -283,7 +288,7 @@ export class HeroScheduler {
     if (this.isReactiveHarasserDecision(candidate) && candidate.targetId) {
       const target = summary.nearbyEnemies.find((enemy) => enemy.id === candidate.targetId);
       const lockedDecision = target
-        ? { ...candidate, moveTo: { ...target.position } }
+        ? { ...candidate, moveToTile: { ...target.tile } }
         : candidate;
       this.reactiveLocks.set(heroId, {
         decision: lockedDecision,
@@ -317,7 +322,7 @@ export class HeroScheduler {
 
     const refreshedLock: HeroDecision = {
       ...existingLock.decision,
-      moveTo: { ...lockedTarget.position },
+      moveToTile: { ...lockedTarget.tile },
       targetId: lockedTarget.id,
       recheckInSec: Math.min(existingLock.decision.recheckInSec, REACTIVE_LOCK_SEC),
     };
@@ -399,10 +404,10 @@ export class HeroScheduler {
   ): HeroDecision {
     const structuredDecision: HeroDecision = {
       ...decision,
-      moveTo: decision.moveTo ? { ...decision.moveTo } : undefined,
+      moveToTile: decision.moveToTile ? { ...decision.moveToTile } : undefined,
       groupOrders: decision.groupOrders?.map((groupOrder) => ({
         ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
+        moveToTile: groupOrder.moveToTile ? { ...groupOrder.moveToTile } : undefined,
       })),
     };
     const directiveHasSpatialReference = SPATIAL_DIRECTION_PATTERN.test(directive);
@@ -416,14 +421,14 @@ export class HeroScheduler {
     }
 
     if (
-      parsedDirective.moveTo &&
+      parsedDirective.moveToTile &&
       this.shouldApplyDirectiveMoveTo(
         structuredDecision,
         parsedDirective,
         directiveHasSpatialReference
       )
     ) {
-      structuredDecision.moveTo = { ...parsedDirective.moveTo };
+      structuredDecision.moveToTile = { ...parsedDirective.moveToTile };
       structuredDecision.rationaleTag = this.appendDirectiveTag(
         structuredDecision.rationaleTag,
         'directive_anchor'
@@ -438,18 +443,18 @@ export class HeroScheduler {
     parsedDirective: HeroDecision,
     directiveHasSpatialReference: boolean
   ): boolean {
-    if (!parsedDirective.moveTo) {
+    if (!parsedDirective.moveToTile) {
       return false;
     }
 
     if (decision.intent === parsedDirective.intent) {
-      return directiveHasSpatialReference || !decision.moveTo;
+      return directiveHasSpatialReference || !decision.moveToTile;
     }
 
     return (
       isPositionalIntent(decision.intent) &&
       isPositionalIntent(parsedDirective.intent) &&
-      (directiveHasSpatialReference || !decision.moveTo)
+      (directiveHasSpatialReference || !decision.moveToTile)
     );
   }
 
@@ -468,7 +473,7 @@ export class HeroScheduler {
     if (!currentOrders?.length) {
       return directiveOrders.map((groupOrder) => ({
         ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
+        moveToTile: groupOrder.moveToTile ? { ...groupOrder.moveToTile } : undefined,
       }));
     }
 
@@ -476,7 +481,7 @@ export class HeroScheduler {
     for (const groupOrder of currentOrders) {
       merged.set(groupOrder.group, {
         ...groupOrder,
-        moveTo: groupOrder.moveTo ? { ...groupOrder.moveTo } : undefined,
+        moveToTile: groupOrder.moveToTile ? { ...groupOrder.moveToTile } : undefined,
       });
     }
 
@@ -485,18 +490,19 @@ export class HeroScheduler {
       if (!existing) {
         merged.set(directiveOrder.group, {
           ...directiveOrder,
-          moveTo: directiveOrder.moveTo ? { ...directiveOrder.moveTo } : undefined,
+          moveToTile: directiveOrder.moveToTile ? { ...directiveOrder.moveToTile } : undefined,
         });
         continue;
       }
 
       merged.set(directiveOrder.group, {
         ...existing,
-        targetId: existing.targetId ?? directiveOrder.targetId,
-        moveTo: existing.moveTo
-          ? { ...existing.moveTo }
-          : directiveOrder.moveTo
-            ? { ...directiveOrder.moveTo }
+        intent: directiveOrder.intent,
+        targetId: directiveOrder.targetId ?? existing.targetId,
+        moveToTile: directiveOrder.moveToTile
+          ? { ...directiveOrder.moveToTile }
+          : existing.moveToTile
+            ? { ...existing.moveToTile }
             : undefined,
       });
     }

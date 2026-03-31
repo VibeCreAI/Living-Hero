@@ -1,9 +1,15 @@
 import { Unit } from '../entities/Unit';
 import { DamageEvent } from '../types';
+import { BattleGrid } from './BattleGrid';
 import { ObstacleSystem } from './Obstacles';
 
 export class CombatSystem {
+  private battleGrid: BattleGrid | null = null;
   private obstacles: ObstacleSystem | null = null;
+
+  setBattleGrid(battleGrid: BattleGrid): void {
+    this.battleGrid = battleGrid;
+  }
 
   setObstacles(obstacles: ObstacleSystem): void {
     this.obstacles = obstacles;
@@ -33,8 +39,16 @@ export class CombatSystem {
 
       attacker.faceToward(target.state.position);
 
-      const distance = attacker.distanceTo(target);
-      if (distance > attacker.state.attackRange) continue;
+      const attackRange = this.battleGrid
+        ? this.battleGrid.pixelsToAttackRangeTiles(attacker.state.attackRange)
+        : attacker.state.attackRange;
+      if (
+        this.battleGrid
+          ? !this.battleGrid.isWithinAttackRange(attacker.state.tile, target.state.tile, attackRange)
+          : attacker.distanceTo(target) > attackRange
+      ) {
+        continue;
+      }
       if (
         this.obstacles &&
         !this.obstacles.hasLineOfSight(attacker.state.position, target.state.position, 6)

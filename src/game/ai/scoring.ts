@@ -64,7 +64,7 @@ export function personalityScore(candidate: Candidate, _summary: HeroSummary, tr
 }
 
 function tacticalPositionScore(candidate: Candidate, summary: HeroSummary): number {
-  if (!candidate.moveTo) {
+  if (!candidate.moveToTile) {
     return 0;
   }
 
@@ -75,15 +75,15 @@ function tacticalPositionScore(candidate: Candidate, summary: HeroSummary): numb
 
   const anchor =
     candidate.intent === 'protect_target'
-      ? summary.nearbyAllies.find((ally) => ally.id === candidate.targetId)?.position
-        ?? summary.heroState.position
+      ? summary.nearbyAllies.find((ally) => ally.id === candidate.targetId)?.tile
+        ?? summary.heroState.tile
       : candidate.intent === 'advance_to_point'
-        ? clusterCenter(summary.nearbyEnemies) ?? summary.heroState.position
+        ? clusterCenter(summary.nearbyEnemies.map((enemy) => enemy.tile)) ?? summary.heroState.tile
         : candidate.intent === 'retreat_to_point'
-          ? clusterCenter(summary.nearbyAllies) ?? summary.heroState.position
-          : summary.heroState.position;
+          ? clusterCenter(summary.nearbyAllies.map((ally) => ally.tile)) ?? summary.heroState.tile
+          : summary.heroState.tile;
 
-  return scoreTacticalPosition(summary, candidate.moveTo, intent, anchor) * 0.08;
+  return scoreTacticalPosition(summary, candidate.moveToTile, intent, anchor) * 0.08;
 }
 
 /** Total score = base + personality + tactical position. */
@@ -108,20 +108,20 @@ function toTacticalIntent(intent: Candidate['intent']): TacticalIntent | null {
   }
 }
 
-function clusterCenter(units: { position: { x: number; y: number } }[]): { x: number; y: number } | undefined {
+function clusterCenter(units: { col: number; row: number }[]): { col: number; row: number } | undefined {
   if (units.length === 0) {
     return undefined;
   }
 
-  let sumX = 0;
-  let sumY = 0;
+  let sumCol = 0;
+  let sumRow = 0;
   for (const unit of units) {
-    sumX += unit.position.x;
-    sumY += unit.position.y;
+    sumCol += unit.col;
+    sumRow += unit.row;
   }
 
   return {
-    x: sumX / units.length,
-    y: sumY / units.length,
+    col: Math.round(sumCol / units.length),
+    row: Math.round(sumRow / units.length),
   };
 }

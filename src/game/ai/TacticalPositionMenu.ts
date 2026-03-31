@@ -1,219 +1,192 @@
-import { BattleObstacle, HeroSummary, Position } from '../types';
+import { HeroSummary, Position, TileCoord } from '../types';
 import {
   findBestPointAroundObstacle,
   scoreTacticalPosition,
   TacticalIntent,
 } from './cover';
-import { positionToRegion, obstacleDirectionLabel } from './BattleVocabulary';
+import { obstacleDirectionLabel, tileToRegion, tileToWorld } from './BattleVocabulary';
 
-/**
- * A pre-computed tactical position that the LLM can pick by label letter.
- * The LLM sees the label + description; the resolver maps the letter back to coords.
- */
 export interface TacticalPosition {
-  /** Single letter: A, B, C, ... */
   label: string;
-  /** Human-readable name: "Behind North Wall" */
   name: string;
-  /** Actual map coordinates for display + execution */
+  tile: TileCoord;
   coords: Position;
-  /** One-line tactical description for the prompt */
   description: string;
-  /** Whether this position is shielded from the threat */
   coverQuality: 'full' | 'partial' | 'exposed';
-  /** Source obstacle (if position is obstacle-derived) */
   obstacleName?: string;
 }
 
 export interface TacticalPositionMenuResult {
   positions: TacticalPosition[];
-  /** Map from label letter → TacticalPosition for fast lookup */
   lookup: Map<string, TacticalPosition>;
 }
 
 const LABELS = 'ABCDEFGH';
-const DEDUP_RADIUS = 60;
 const MAX_POSITIONS = 8;
-const MAP_WIDTH = 1024;
-const MAP_HEIGHT = 768;
 
-/**
- * Generate a menu of tactical positions for the LLM to pick from.
- * Combines obstacle-derived cover positions + open-field cardinal positions + hero's current position.
- */
 export function buildTacticalPositionMenu(
   summary: HeroSummary,
   intent: TacticalIntent = 'hold'
 ): TacticalPositionMenuResult {
   const candidates: Omit<TacticalPosition, 'label'>[] = [];
-  const anchor = summary.heroState.position;
-  const threat = clusterCenter(summary.nearbyEnemies);
+  const anchor = summary.heroState.tile;
+  const threat = clusterCenter(summary.nearbyEnemies.map((enemy) => enemy.position));
 
-  // 1. Generate obstacle-derived positions
   for (const obstacle of summary.obstacles) {
     const coverAnchor = findBestPointAroundObstacle(summary, obstacle, intent, anchor);
-    const region = positionToRegion(coverAnchor.position);
-    const dirLabel = obstacleDirectionLabel(obstacle);
+    const region = tileToRegion(coverAnchor.tile, summary.grid);
+    const dirLabel = obstacleDirectionLabel(obstacle, summary.grid);
 
     candidates.push({
       name: `Behind ${dirLabel}`,
+      tile: coverAnchor.tile,
       coords: coverAnchor.position,
-      description: buildCoverDescription(coverAnchor.providesCover, region, threat, coverAnchor.position),
+      description: buildCoverDescription(
+        coverAnchor.providesCover,
+        region,
+        threat,
+        coverAnchor.position
+      ),
       coverQuality: coverAnchor.providesCover ? 'full' : 'partial',
       obstacleName: obstacle.label,
     });
   }
 
-  // 2. Add open-field cardinal positions
-  const cardinalPositions: { name: string; pos: Position }[] = [
-    { name: 'Center Field', pos: { x: MAP_WIDTH * 0.5, y: MAP_HEIGHT * 0.5 } },
-    { name: 'East Flank', pos: { x: MAP_WIDTH * 0.82, y: MAP_HEIGHT * 0.5 } },
-    { name: 'West Flank', pos: { x: MAP_WIDTH * 0.18, y: MAP_HEIGHT * 0.5 } },
-    { name: 'North Field', pos: { x: MAP_WIDTH * 0.5, y: MAP_HEIGHT * 0.2 } },
-    { name: 'South Field', pos: { x: MAP_WIDTH * 0.5, y: MAP_HEIGHT * 0.8 } },
-  ];
-
-  for (const { name, pos } of cardinalPositions) {
-    // Only add if not too close to an existing obstacle-derived position
-    if (!isNearExisting(pos, candidates.map((c) => c.coords), DEDUP_RADIUS)) {
-      const isExposed = !threat || !isShielded(pos, threat, summary.obstacles);
-      candidates.push({
-        name,
-        coords: pos,
-        description: isExposed
-          ? `exposed, ${describeThreatRelation(pos, threat)}`
-          : `some cover, ${describeThreatRelation(pos, threat)}`,
-        coverQuality: isExposed ? 'exposed' : 'partial',
-      });
+  for (const anchorOption of summary.grid.tacticalAnchors) {
+    if (isNearExisting(anchorOption.tile, candidates.map((candidate) => candidate.tile), 1)) {
+      continue;
     }
+
+    const coords = tileToWorld(anchorOption.tile, summary.grid);
+    const isExposed = !threat || !isShielded(coords, threat, summary.obstacles);
+    candidates.push({
+      name: anchorOption.name,
+      tile: anchorOption.tile,
+      coords,
+      description: isExposed
+        ? `exposed, ${describeThreatRelation(coords, threat)}`
+        : `some cover, ${describeThreatRelation(coords, threat)}`,
+      coverQuality: isExposed ? 'exposed' : 'partial',
+    });
   }
 
-  // 3. Add hero's current position
-  if (!isNearExisting(anchor, candidates.map((c) => c.coords), 40)) {
-    const region = positionToRegion(anchor);
+  if (!isNearExisting(anchor, candidates.map((candidate) => candidate.tile), 1)) {
     candidates.push({
       name: 'Current Position',
-      coords: { ...anchor },
-      description: `where you are now (${region})`,
+      tile: { ...anchor },
+      coords: tileToWorld(anchor, summary.grid),
+      description: `where you are now (${tileToRegion(anchor, summary.grid)})`,
       coverQuality: 'exposed',
     });
   }
 
-  // 4. Score and rank all positions, take top N
-  const scored = candidates.map((c) => ({
-    ...c,
-    score: scoreTacticalPosition(summary, c.coords, intent, anchor),
+  const scored = candidates.map((candidate) => ({
+    ...candidate,
+    score: scoreTacticalPosition(summary, candidate.tile, intent, anchor),
   }));
   scored.sort((a, b) => b.score - a.score);
 
-  // Deduplicate close positions (keep higher-scored)
   const deduped: typeof scored = [];
-  for (const s of scored) {
-    if (!isNearExisting(s.coords, deduped.map((d) => d.coords), DEDUP_RADIUS)) {
-      deduped.push(s);
+  for (const scoredCandidate of scored) {
+    if (!isNearExisting(scoredCandidate.tile, deduped.map((entry) => entry.tile), 1)) {
+      deduped.push(scoredCandidate);
     }
   }
 
-  // 5. Assign labels and build result
   const positions: TacticalPosition[] = deduped
     .slice(0, MAX_POSITIONS)
-    .map((s, i) => ({
-      label: LABELS[i] ?? String(i),
-      name: s.name,
-      coords: { x: Math.round(s.coords.x), y: Math.round(s.coords.y) },
-      description: s.description,
-      coverQuality: s.coverQuality,
-      obstacleName: s.obstacleName,
+    .map((candidate, index) => ({
+      label: LABELS[index] ?? String(index),
+      name: candidate.name,
+      tile: { ...candidate.tile },
+      coords: { ...candidate.coords },
+      description: candidate.description,
+      coverQuality: candidate.coverQuality,
+      obstacleName: candidate.obstacleName,
     }));
 
   const lookup = new Map<string, TacticalPosition>();
-  for (const pos of positions) {
-    lookup.set(pos.label.toLowerCase(), pos);
-    // Also allow matching by name prefix
-    lookup.set(pos.name.toLowerCase(), pos);
+  for (const position of positions) {
+    lookup.set(position.label.toLowerCase(), position);
+    lookup.set(position.name.toLowerCase(), position);
   }
 
   return { positions, lookup };
 }
 
-/**
- * Resolve an LLM moveOption string to coordinates.
- * Accepts: label letter ("A"), position name ("Behind North Wall"), or region ("east").
- */
 export function resolveMoveOption(
   menu: TacticalPositionMenuResult,
-  moveOption: string,
-  _heroPosition?: Position
-): Position | undefined {
-  if (!moveOption) return undefined;
+  moveOption: string
+): TileCoord | undefined {
+  if (!moveOption) {
+    return undefined;
+  }
+
   const lower = moveOption.toLowerCase().trim();
-
-  // Try direct label match (single letter)
   const byLabel = menu.lookup.get(lower);
-  if (byLabel) return { ...byLabel.coords };
+  if (byLabel) {
+    return { ...byLabel.tile };
+  }
 
-  // Try name match
-  const byName = menu.lookup.get(lower);
-  if (byName) return { ...byName.coords };
-
-  // Try fuzzy: find position whose name contains the query
-  for (const pos of menu.positions) {
-    if (pos.name.toLowerCase().includes(lower) || lower.includes(pos.label.toLowerCase())) {
-      return { ...pos.coords };
+  for (const position of menu.positions) {
+    if (
+      position.name.toLowerCase().includes(lower) ||
+      lower.includes(position.label.toLowerCase())
+    ) {
+      return { ...position.tile };
     }
   }
 
   return undefined;
 }
 
-/** Format the position menu for inclusion in the LLM prompt */
 export function formatPositionMenuForPrompt(menu: TacticalPositionMenuResult): string {
   if (menu.positions.length === 0) {
-    return 'TACTICAL POSITIONS: Open field, no significant positions.';
+    return 'TACTICAL TILES: Open field, no significant tactical tiles.';
   }
 
   const lines = menu.positions.map(
-    (p) =>
-      `  ${p.label}: ${p.name} (${p.coords.x}, ${p.coords.y}) \u2014 ${p.coverQuality} cover, ${p.description}`
+    (position) =>
+      `  ${position.label}: ${position.name} [${position.tile.col},${position.tile.row}] - ${position.coverQuality} cover, ${position.description}`
   );
 
-  return `TACTICAL POSITIONS (pick a letter for moveOption):\n${lines.join('\n')}`;
+  return `TACTICAL TILES (pick a letter for moveOption):\n${lines.join('\n')}`;
 }
 
-// ── Helpers ──
+function clusterCenter(points: Position[]): Position | undefined {
+  if (points.length === 0) {
+    return undefined;
+  }
 
-function clusterCenter(units: { position: Position }[]): Position | undefined {
-  if (units.length === 0) return undefined;
   let sumX = 0;
   let sumY = 0;
-  for (const unit of units) {
-    sumX += unit.position.x;
-    sumY += unit.position.y;
+  for (const point of points) {
+    sumX += point.x;
+    sumY += point.y;
   }
-  return { x: sumX / units.length, y: sumY / units.length };
+  return { x: sumX / points.length, y: sumY / points.length };
 }
 
-function dist(a: Position, b: Position): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function isNearExisting(tile: TileCoord, existing: TileCoord[], radius: number): boolean {
+  return existing.some(
+    (entry) => Math.hypot(tile.col - entry.col, tile.row - entry.row) <= radius
+  );
 }
 
-function isNearExisting(pos: Position, existing: Position[], radius: number): boolean {
-  return existing.some((e) => dist(pos, e) < radius);
-}
-
-function isShielded(
-  point: Position,
-  threat: Position,
-  obstacles: BattleObstacle[]
-): boolean {
-  return obstacles.some((obs) => {
-    const d = dist(threat, point);
-    const steps = Math.max(1, Math.ceil(d / 10));
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
+function isShielded(point: Position, threat: Position, obstacles: HeroSummary['obstacles']): boolean {
+  return obstacles.some((obstacle) => {
+    const distance = Math.hypot(threat.x - point.x, threat.y - point.y);
+    const steps = Math.max(1, Math.ceil(distance / 10));
+    for (let index = 1; index < steps; index++) {
+      const t = index / steps;
       const sx = threat.x + (point.x - threat.x) * t;
       const sy = threat.y + (point.y - threat.y) * t;
-      if (sx >= obs.x - 4 && sx <= obs.x + obs.width + 4 && sy >= obs.y - 4 && sy <= obs.y + obs.height + 4) {
+      if (
+        sx >= obstacle.x - 4 &&
+        sx <= obstacle.x + obstacle.width + 4 &&
+        sy >= obstacle.y - 4 &&
+        sy <= obstacle.y + obstacle.height + 4
+      ) {
         return true;
       }
     }
@@ -225,18 +198,24 @@ function buildCoverDescription(
   providesCover: boolean,
   _region: string,
   threat: Position | undefined,
-  pos: Position
+  position: Position
 ): string {
-  const coverStr = providesCover ? 'shielded from enemies' : 'partial cover';
-  const threatStr = threat ? describeThreatRelation(pos, threat) : 'no enemies visible';
-  return `${coverStr}, ${threatStr}`;
+  const cover = providesCover ? 'shielded from enemies' : 'partial cover';
+  const threatRelation = threat ? describeThreatRelation(position, threat) : 'no enemies visible';
+  return `${cover}, ${threatRelation}`;
 }
 
-function describeThreatRelation(pos: Position, threat: Position | undefined): string {
-  if (!threat) return 'no enemies nearby';
-  const d = dist(pos, threat);
-  const dir = positionToRegion(threat);
-  if (d < 150) return `close to enemies (${dir})`;
-  if (d < 300) return `mid-range from enemies (${dir})`;
-  return `far from enemies (${dir})`;
+function describeThreatRelation(position: Position, threat: Position | undefined): string {
+  if (!threat) {
+    return 'no enemies nearby';
+  }
+
+  const distance = Math.hypot(position.x - threat.x, position.y - threat.y);
+  if (distance < 150) {
+    return 'close to enemies';
+  }
+  if (distance < 300) {
+    return 'mid-range from enemies';
+  }
+  return 'far from enemies';
 }

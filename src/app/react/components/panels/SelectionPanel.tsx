@@ -80,7 +80,7 @@ function UnitInfo({ unit }: { unit: UnitState }) {
       {unit.isPassive && <div>Behavior: passive target</div>}
       {unit.orderMode && <div>Order: {unit.orderMode}</div>}
       <div>
-        Pos: ({Math.round(unit.position.x)}, {Math.round(unit.position.y)})
+        Tile: [{unit.tile.col}, {unit.tile.row}]
       </div>
       {unit.targetId && <div>Target: {unit.targetId}</div>}
     </>
@@ -96,7 +96,7 @@ function HeroInfo({ hero }: { hero: HeroState }) {
         {hero.name}
       </div>
       <div>
-        Pos: ({Math.round(hero.position.x)}, {Math.round(hero.position.y)})
+        Tile: [{hero.tile.col}, {hero.tile.row}]
       </div>
       {hero.currentDirective && <div>Directive: {hero.currentDirective}</div>}
       {decision && (
@@ -105,17 +105,17 @@ function HeroInfo({ hero }: { hero: HeroState }) {
           <div>Rationale: {decision.rationaleTag.replace(/_/g, ' ')}</div>
           <div>Priority: {decision.priority}</div>
           <div>Recheck: {decision.recheckInSec.toFixed(1)}s</div>
-          {decision.moveTo && (
+          {decision.moveToTile && (
             <div>
-              MoveTo: ({Math.round(decision.moveTo.x)}, {Math.round(decision.moveTo.y)})
+              MoveTo: [{decision.moveToTile.col}, {decision.moveToTile.row}]
             </div>
           )}
           {decision.groupOrders?.map((groupOrder) => (
             <div key={groupOrder.group}>
               {groupOrder.group}: {groupOrder.intent.replace(/_/g, ' ')}
               {groupOrder.targetId ? ` -> ${groupOrder.targetId}` : ''}
-              {groupOrder.moveTo
-                ? ` @ (${Math.round(groupOrder.moveTo.x)}, ${Math.round(groupOrder.moveTo.y)})`
+              {groupOrder.moveToTile
+                ? ` @ [${groupOrder.moveToTile.col}, ${groupOrder.moveToTile.row}]`
                 : ''}
             </div>
           ))}

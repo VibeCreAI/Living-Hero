@@ -8,6 +8,7 @@ export function buildHeroSummary(
 
   return {
     mode: battleState.mode,
+    grid: battleState.grid,
     heroState,
     heroUnit,
     currentDirective: heroState.currentDirective,

@@ -1,22 +1,22 @@
-import { HeroSummary, IntentType, Position, UnitState } from '../types';
+import { HeroSummary, IntentType, TileCoord, UnitState } from '../types';
 import { chooseTacticalAnchor } from './cover';
 
 export interface Candidate {
   intent: IntentType;
   targetId?: string;
-  moveTo?: Position;
+  moveToTile?: TileCoord;
   skillId?: string;
 }
 
 /** Generate all candidate intents from the current battlefield state. */
 export function generateCandidates(summary: HeroSummary): Candidate[] {
   const candidates: Candidate[] = [];
-  const alliesCenter = clusterCenter(summary.nearbyAllies);
+  const alliesCenter = clusterCenter(summary, summary.nearbyAllies.map((ally) => ally.tile));
 
   // Always available: hold position
   candidates.push({
     intent: 'hold_position',
-    moveTo: chooseTacticalAnchor(summary, 'hold', summary.heroState.position),
+    moveToTile: chooseTacticalAnchor(summary, 'hold', summary.heroState.tile),
   });
 
   // Advance toward enemy cluster
@@ -24,7 +24,7 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
     const forwardPoint = getForwardPoint(summary);
     candidates.push({
       intent: 'advance_to_point',
-      moveTo: chooseTacticalAnchor(summary, 'advance', forwardPoint),
+      moveToTile: chooseTacticalAnchor(summary, 'advance', forwardPoint),
     });
   }
 
@@ -35,7 +35,7 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
       candidates.push({
         intent: 'protect_target',
         targetId: threatened.id,
-        moveTo: chooseTacticalAnchor(summary, 'protect', threatened.position),
+        moveToTile: chooseTacticalAnchor(summary, 'protect', threatened.tile),
       });
     }
   }
@@ -47,7 +47,7 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
       candidates.push({
         intent: 'focus_enemy',
         targetId: target.id,
-        moveTo: { ...target.position },
+        moveToTile: { ...target.tile },
       });
     }
   }
@@ -56,13 +56,13 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
   const safePoint = getSafePoint(summary);
   candidates.push({
     intent: 'retreat_to_point',
-    moveTo: chooseTacticalAnchor(summary, 'retreat', safePoint),
+    moveToTile: chooseTacticalAnchor(summary, 'retreat', safePoint),
   });
 
   if (summary.obstacles.length > 0 && alliesCenter) {
     candidates.push({
       intent: 'hold_position',
-      moveTo: chooseTacticalAnchor(summary, 'hold', alliesCenter),
+      moveToTile: chooseTacticalAnchor(summary, 'hold', alliesCenter),
     });
   }
 
@@ -70,8 +70,8 @@ export function generateCandidates(summary: HeroSummary): Candidate[] {
 }
 
 /** Center of enemy positions — the "forward" engagement point. */
-function getForwardPoint(summary: HeroSummary): Position {
-  return clusterCenter(summary.nearbyEnemies);
+function getForwardPoint(summary: HeroSummary): TileCoord {
+  return clusterCenter(summary, summary.nearbyEnemies.map((enemy) => enemy.tile));
 }
 
 /** Ally with lowest HP percentage. */
@@ -106,26 +106,30 @@ function getBestFocusTarget(summary: HeroSummary): UnitState | undefined {
 }
 
 /** Safe point: behind allied lines (left side of battlefield). */
-function getSafePoint(summary: HeroSummary): Position {
+function getSafePoint(summary: HeroSummary): TileCoord {
   if (summary.nearbyAllies.length > 0) {
-    const center = clusterCenter(summary.nearbyAllies);
-    // Move behind allies (further left)
-    return { x: Math.max(50, center.x - 100), y: center.y };
+    const center = clusterCenter(summary, summary.nearbyAllies.map((ally) => ally.tile));
+    return {
+      col: Math.max(1, center.col - 2),
+      row: center.row,
+    };
   }
-  return { x: 80, y: 384 };
+  return { col: 1, row: Math.floor(summary.grid.rows / 2) };
 }
 
-function clusterCenter(units: { position: Position }[]): Position {
-  if (units.length === 0) return { x: 512, y: 384 };
+function clusterCenter(summary: HeroSummary, tiles: TileCoord[]): TileCoord {
+  if (tiles.length === 0) {
+    return { col: Math.floor(summary.grid.cols / 2), row: Math.floor(summary.grid.rows / 2) };
+  }
 
-  let sumX = 0;
-  let sumY = 0;
-  for (const u of units) {
-    sumX += u.position.x;
-    sumY += u.position.y;
+  let sumCol = 0;
+  let sumRow = 0;
+  for (const tile of tiles) {
+    sumCol += tile.col;
+    sumRow += tile.row;
   }
   return {
-    x: sumX / units.length,
-    y: sumY / units.length,
+    col: Math.round(sumCol / tiles.length),
+    row: Math.round(sumRow / tiles.length),
   };
 }

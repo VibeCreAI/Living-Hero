@@ -1,4 +1,4 @@
-import { GroupOrder, HeroDecision, HeroSummary, Position, UnitState } from '../types';
+import { GroupOrder, HeroDecision, HeroSummary, TileCoord, UnitState } from '../types';
 import { refineDecisionPositionForCover } from './cover';
 
 interface HarassThreat {
@@ -21,13 +21,13 @@ export function adaptDirectiveDecision(
         return buildHarasserCounterDecision(
           directive,
           harasser,
-          { ...harasser.position },
+          { ...harasser.tile },
           'directive_counter_harasser'
         );
       }
       return refineDecisionPositionForCover(summary, {
         ...directive,
-        moveTo: directive.moveTo ?? summary.heroState.position,
+        moveToTile: directive.moveToTile ?? summary.heroState.tile,
         rationaleTag: `directive_${directive.rationaleTag}`,
       });
 
@@ -37,24 +37,24 @@ export function adaptDirectiveDecision(
         return buildHarasserCounterDecision(
           directive,
           harasser,
-          midpoint(weakAlly.position, harasser.position),
+          midpointTile(weakAlly.tile, harasser.tile),
           'directive_screen_harasser'
         );
       }
       return refineDecisionPositionForCover(summary, {
         ...directive,
-        moveTo: directive.moveTo ?? weakAlly?.position ?? summary.heroState.position,
+        moveToTile: directive.moveToTile ?? weakAlly?.tile ?? summary.heroState.tile,
         rationaleTag: `directive_${directive.rationaleTag}`,
       });
     }
 
     case 'retreat_to_point': {
-      const retreatPoint = directive.moveTo ?? summary.heroState.position;
-      const avgDistanceToRetreat = averageDistance(summary.nearbyAllies, retreatPoint);
-      if (avgDistanceToRetreat < 55 && !harasser) {
+      const retreatTile = directive.moveToTile ?? summary.heroState.tile;
+      const avgDistanceToRetreat = averageDistance(summary.nearbyAllies, retreatTile);
+      if (avgDistanceToRetreat < 2 && !harasser) {
         return refineDecisionPositionForCover(summary, {
           intent: 'hold_position',
-          moveTo: { ...retreatPoint },
+          moveToTile: { ...retreatTile },
           priority: 'medium',
           rationaleTag: 'directive_hold_retreated_position',
           recheckInSec: 2,
@@ -62,7 +62,7 @@ export function adaptDirectiveDecision(
       }
       return refineDecisionPositionForCover(summary, {
         ...directive,
-        moveTo: retreatPoint,
+        moveToTile: retreatTile,
         rationaleTag: `directive_${directive.rationaleTag}`,
       });
     }
@@ -70,7 +70,10 @@ export function adaptDirectiveDecision(
     case 'advance_to_point':
       return refineDecisionPositionForCover(summary, {
         ...directive,
-        moveTo: directive.moveTo ?? clusterCenter(summary.nearbyEnemies) ?? summary.heroState.position,
+        moveToTile:
+          directive.moveToTile ??
+          clusterCenter(summary.nearbyEnemies.map((enemy) => enemy.tile), summary) ??
+          summary.heroState.tile,
         rationaleTag: `directive_${directive.rationaleTag}`,
       });
 
@@ -81,7 +84,7 @@ export function adaptDirectiveDecision(
       if (target) {
         return {
           ...directive,
-          moveTo: { ...target.position },
+          moveToTile: { ...target.tile },
           rationaleTag: `directive_${directive.rationaleTag}`,
         };
       }
@@ -90,14 +93,16 @@ export function adaptDirectiveDecision(
         return buildHarasserCounterDecision(
           directive,
           harasser,
-          { ...harasser.position },
+          { ...harasser.tile },
           'directive_retarget_harasser'
         );
       }
 
       return {
         intent: 'advance_to_point',
-        moveTo: clusterCenter(summary.nearbyEnemies) ?? summary.heroState.position,
+        moveToTile:
+          clusterCenter(summary.nearbyEnemies.map((enemy) => enemy.tile), summary) ??
+          summary.heroState.tile,
         priority: directive.priority,
         rationaleTag: 'directive_focus_target_lost',
         recheckInSec: 2,
@@ -109,10 +114,7 @@ export function adaptDirectiveDecision(
   }
 }
 
-export function adaptReactiveDecision(
-  summary: HeroSummary,
-  decision: HeroDecision
-): HeroDecision {
+export function adaptReactiveDecision(summary: HeroSummary, decision: HeroDecision): HeroDecision {
   const harasser = findHarassingEnemy(summary);
   if (!harasser) {
     return refineDecisionPositionForCover(summary, decision);
@@ -124,18 +126,18 @@ export function adaptReactiveDecision(
       return buildHarasserCounterDecision(
         decision,
         harasser,
-        { ...harasser.position },
+        { ...harasser.tile },
         'reactive_counter_harasser'
       );
 
     case 'retreat_to_point': {
-      const retreatPoint = decision.moveTo ?? summary.heroState.position;
-      const closeToRetreat = averageDistance(summary.nearbyAllies, retreatPoint) < 70;
+      const retreatTile = decision.moveToTile ?? summary.heroState.tile;
+      const closeToRetreat = averageDistance(summary.nearbyAllies, retreatTile) < 2;
       if (closeToRetreat) {
         return buildHarasserCounterDecision(
           decision,
           harasser,
-          { ...harasser.position },
+          { ...harasser.tile },
           'reactive_counter_harasser'
         );
       }
@@ -148,12 +150,7 @@ export function adaptReactiveDecision(
 }
 
 function findHarassingEnemy(summary: HeroSummary): UnitState | undefined {
-  const recentThreat = findRecentDamageThreat(summary);
-  if (recentThreat) {
-    return recentThreat;
-  }
-
-  return findInferredHarasser(summary);
+  return findRecentDamageThreat(summary) ?? findInferredHarasser(summary);
 }
 
 function findRecentDamageThreat(summary: HeroSummary): UnitState | undefined {
@@ -176,11 +173,7 @@ function findRecentDamageThreat(summary: HeroSummary): UnitState | undefined {
     const totalDamage = hits.reduce((sum, event) => sum + event.damage, 0);
     const distinctVictims = new Set(hits.map((event) => event.targetId)).size;
     const timePressure = hits.reduce((sum, event) => sum + Math.max(0, summary.timeSec - event.timeSec), 0);
-    const score =
-      totalDamage * 1.5 +
-      hits.length * 6 +
-      distinctVictims * 5 -
-      timePressure;
+    const score = totalDamage * 1.5 + hits.length * 6 + distinctVictims * 5 - timePressure;
 
     if (score > bestScore) {
       bestScore = score;
@@ -199,9 +192,9 @@ function findInferredHarasser(summary: HeroSummary): UnitState | undefined {
     let unsupportedShots = 0;
 
     for (const ally of summary.nearbyAllies) {
-      const distance = dist(enemy.position, ally.position);
-      const enemyCanHit = distance <= enemy.attackRange + HARASS_RANGE_BUFFER;
-      const allyCanHit = distance <= ally.attackRange + HARASS_RANGE_BUFFER;
+      const distance = tileDistance(enemy.tile, ally.tile);
+      const enemyCanHit = distance <= enemy.attackRange / summary.grid.tileWidth + HARASS_RANGE_BUFFER / summary.grid.tileWidth;
+      const allyCanHit = distance <= ally.attackRange / summary.grid.tileWidth + HARASS_RANGE_BUFFER / summary.grid.tileWidth;
 
       if (!enemyCanHit) {
         continue;
@@ -217,10 +210,7 @@ function findInferredHarasser(summary: HeroSummary): UnitState | undefined {
       continue;
     }
 
-    const rangeAdvantage = Math.max(
-      0,
-      enemy.attackRange - averageAttackRange(summary.nearbyAllies)
-    );
+    const rangeAdvantage = Math.max(0, enemy.attackRange - averageAttackRange(summary.nearbyAllies));
     const score =
       unsupportedShots * 10 +
       threatenedAllies * 4 +
@@ -258,57 +248,58 @@ function averageAttackRange(allies: UnitState[]): number {
   if (allies.length === 0) {
     return 0;
   }
-
   return allies.reduce((sum, ally) => sum + ally.attackRange, 0) / allies.length;
 }
 
-function averageDistance(units: UnitState[], point: Position): number {
+function averageDistance(units: UnitState[], tile: TileCoord): number {
   if (units.length === 0) {
     return 0;
   }
-
-  return units.reduce((sum, unit) => sum + dist(unit.position, point), 0) / units.length;
+  return units.reduce((sum, unit) => sum + tileDistance(unit.tile, tile), 0) / units.length;
 }
 
-function clusterCenter(units: UnitState[]): Position | undefined {
-  if (units.length === 0) {
+function clusterCenter(
+  tiles: TileCoord[],
+  summary: HeroSummary
+): TileCoord | undefined {
+  if (tiles.length === 0) {
     return undefined;
   }
 
-  let sumX = 0;
-  let sumY = 0;
-  for (const unit of units) {
-    sumX += unit.position.x;
-    sumY += unit.position.y;
+  let sumCol = 0;
+  let sumRow = 0;
+  for (const tile of tiles) {
+    sumCol += tile.col;
+    sumRow += tile.row;
   }
 
   return {
-    x: sumX / units.length,
-    y: sumY / units.length,
+    col: Math.max(0, Math.min(summary.grid.cols - 1, Math.round(sumCol / tiles.length))),
+    row: Math.max(0, Math.min(summary.grid.rows - 1, Math.round(sumRow / tiles.length))),
   };
 }
 
-function midpoint(a: Position, b: Position): Position {
+function midpointTile(a: TileCoord, b: TileCoord): TileCoord {
   return {
-    x: (a.x + b.x) / 2,
-    y: (a.y + b.y) / 2,
+    col: Math.round((a.col + b.col) / 2),
+    row: Math.round((a.row + b.row) / 2),
   };
 }
 
-function dist(a: Position, b: Position): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function tileDistance(a: TileCoord, b: TileCoord): number {
+  return Math.hypot(a.col - b.col, a.row - b.row);
 }
 
 function buildHarasserCounterDecision(
   baseDecision: HeroDecision,
   harasser: UnitState,
-  moveTo: Position,
+  moveToTile: TileCoord,
   rationaleTag: string
 ): HeroDecision {
   return {
     intent: 'focus_enemy',
     targetId: harasser.id,
-    moveTo,
+    moveToTile,
     groupOrders: upsertWarriorCounterOrder(baseDecision.groupOrders, harasser),
     priority: 'high',
     rationaleTag,
@@ -329,7 +320,7 @@ function upsertWarriorCounterOrder(
     group: 'warriors',
     intent: 'focus_enemy',
     targetId: harasser.id,
-    moveTo: { ...harasser.position },
+    moveToTile: { ...harasser.tile },
   });
 
   return preserved;

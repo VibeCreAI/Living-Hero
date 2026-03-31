@@ -1,5 +1,5 @@
 import { Scene } from 'phaser';
-import { HeroState, HeroConfig, HeroDecision, Position } from '../types';
+import { HeroState, HeroConfig, HeroDecision, Position, TileCoord } from '../types';
 import { EventBus } from '../EventBus';
 import { Unit } from './Unit';
 
@@ -17,12 +17,14 @@ const MAP_HEIGHT = 768;
 export function createHeroState(
   config: HeroConfig,
   combatUnitId: string,
+  tile: TileCoord,
   position: Position
 ): HeroState {
   return {
     id: config.id,
     name: config.name,
     combatUnitId,
+    tile: { ...tile },
     position: { ...position },
     traits: { ...config.traits },
   };
@@ -115,6 +117,8 @@ export class Hero {
 
   syncVisuals(): void {
     const pos = this.combatUnit.state.position;
+    const tile = this.combatUnit.state.tile;
+    this.state.tile = { ...tile };
     this.state.position = { ...pos };
     this.nameText.setPosition(pos.x, pos.y - NAME_Y_OFFSET);
     this.intentText.setPosition(pos.x, pos.y - INTENT_Y_OFFSET);
