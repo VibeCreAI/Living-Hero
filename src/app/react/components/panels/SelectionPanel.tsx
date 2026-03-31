@@ -67,6 +67,7 @@ export function SelectionPanel() {
 function UnitInfo({ unit }: { unit: UnitState }) {
   const hpPct = Math.round((unit.hp / unit.maxHp) * 100);
   const factionColor = unit.faction === 'allied' ? '#4488ff' : '#ff4444';
+  const nav = unit.navigationDebug;
 
   return (
     <>
@@ -82,7 +83,29 @@ function UnitInfo({ unit }: { unit: UnitState }) {
       <div>
         Tile: [{unit.tile.col}, {unit.tile.row}]
       </div>
+      {unit.orderTile && <div>OrderTile: {formatTile(unit.orderTile)}</div>}
       {unit.targetId && <div>Target: {unit.targetId}</div>}
+      {unit.nextTile && <div>NextTile: {formatTile(unit.nextTile)}</div>}
+      {unit.reservedNextTile && <div>ReservedNext: {formatTile(unit.reservedNextTile)}</div>}
+      {unit.pathTiles?.length ? <div>PathHead: {formatTile(unit.pathTiles[0])} ({unit.pathTiles.length})</div> : <div>PathHead: none</div>}
+      {(nav || unit.navigationDebug) && (
+        <>
+          <div style={{ marginTop: '4px', color: '#9ec7d8' }}>Nav Debug</div>
+          {nav?.desiredDestinationKey && (
+            <div>Wanted: {nav.desiredDestinationKey} {nav.desiredDestinationTile ? formatTile(nav.desiredDestinationTile) : ''}</div>
+          )}
+          {nav?.activeDestinationKey && (
+            <div>Active: {nav.activeDestinationKey} {nav.activeDestinationTile ? formatTile(nav.activeDestinationTile) : ''}</div>
+          )}
+          {nav?.replanReason && <div>Replan: {nav.replanReason}</div>}
+          {nav?.holdReason && <div>Hold: {nav.holdReason}</div>}
+          {nav?.lastStepFrom && nav?.lastStepTo && (
+            <div>LastStep: {formatTile(nav.lastStepFrom)} -&gt; {formatTile(nav.lastStepTo)}</div>
+          )}
+          {typeof nav?.waitTimeSec === 'number' && <div>Wait: {nav.waitTimeSec.toFixed(2)}s</div>}
+          {nav?.reservedPathKeys?.length ? <div>Reserved: {nav.reservedPathKeys.join(' | ')}</div> : null}
+        </>
+      )}
     </>
   );
 }
@@ -131,4 +154,8 @@ function HeroInfo({ hero }: { hero: HeroState }) {
 
 function formatGroupLabel(group: string): string {
   return group === 'archers' ? 'ranged' : group;
+}
+
+function formatTile(tile: { col: number; row: number }): string {
+  return `[${tile.col}, ${tile.row}]`;
 }

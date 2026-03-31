@@ -10,6 +10,7 @@ import {
   BattleGridConfig,
   TileCoord,
   PortalFloorNumber,
+  PathfindingBenchmarkResult,
 } from '../types';
 import { Unit, createUnitState } from '../entities/Unit';
 import { Hero, createHeroState } from '../entities/Hero';
@@ -214,15 +215,15 @@ export class BattleLoop {
 
     this.stateManager.updateTime(dt);
 
+    const timeSec = this.stateManager.getState().timeSec;
     this.heroScheduler.update(dt, this.heroes, this.stateManager.getState(), this.alliedUnits, this.enemyUnits);
-    this.targetingSystem.update(this.alliedUnits, this.enemyUnits);
-    this.movementSystem.update(this.alliedUnits, this.enemyUnits, dt);
-    this.targetingSystem.update(this.alliedUnits, this.enemyUnits);
+    this.targetingSystem.update(this.alliedUnits, this.enemyUnits, timeSec);
+    this.movementSystem.update(this.alliedUnits, this.enemyUnits, dt, timeSec);
     const damageEvents = this.combatSystem.update(
       this.alliedUnits,
       this.enemyUnits,
       dt,
-      this.stateManager.getState().timeSec
+      timeSec
     );
     this.stateManager.recordDamage(damageEvents);
     if (damageEvents.length > 0) {
@@ -238,7 +239,12 @@ export class BattleLoop {
   }
 
   getState(): BattleState {
+    this.stateManager.setPathfindingStats(this.battleGrid.getPathfindingStats());
     return this.stateManager.getState();
+  }
+
+  runPathfindingBenchmark(queryCount: number = 96): PathfindingBenchmarkResult {
+    return this.battleGrid.benchmarkPathfinding(queryCount);
   }
 
   getAllDamageEvents(): DamageEvent[] {

@@ -9,9 +9,16 @@ import {
   BattleObstacle,
   BattleGridSummary,
   PortalFloorNumber,
+  PathfindingStats,
 } from '../types';
 
 const RECENT_DAMAGE_WINDOW_SEC = 4;
+const EMPTY_PATHFINDING_STATS: PathfindingStats = {
+  staticJpsHits: 0,
+  jpsConflictRejects: 0,
+  aStarFallbackCount: 0,
+  noPathCount: 0,
+};
 
 export class BattleStateManager {
   private state: BattleState;
@@ -39,6 +46,7 @@ export class BattleStateManager {
       heroes: [],
       obstacles: [],
       recentDamage: [],
+      pathfindingStats: { ...EMPTY_PATHFINDING_STATS },
     };
   }
 
@@ -67,6 +75,7 @@ export class BattleStateManager {
       heroes,
       obstacles,
       recentDamage: [],
+      pathfindingStats: { ...EMPTY_PATHFINDING_STATS },
     };
   }
 
@@ -97,6 +106,10 @@ export class BattleStateManager {
       this.state.recentDamage.push(...events);
     }
     this.pruneRecentDamage();
+  }
+
+  setPathfindingStats(stats: PathfindingStats): void {
+    this.state.pathfindingStats = { ...stats };
   }
 
   private pruneRecentDamage(): void {

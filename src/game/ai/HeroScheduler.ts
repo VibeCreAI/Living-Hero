@@ -140,11 +140,13 @@ export class HeroScheduler {
       // ── Execute current decision ──
       const baseDecision = this.baseDecisions.get(heroId);
       if (baseDecision) {
-        const activeDecision = this.stabilizeDecision(
-          heroId,
-          summary,
-          adaptReactiveDecision(summary, baseDecision)
-        );
+        const activeDecision = this.shouldPinParsedDirective(parsedDirective)
+          ? this.pinDirectiveDecision(baseDecision, parsedDirective)
+          : this.stabilizeDecision(
+              heroId,
+              summary,
+              adaptReactiveDecision(summary, baseDecision)
+            );
         hero.setDecision(activeDecision);
         this.intentExecutor.execute(hero, activeDecision, alliedUnits, enemyUnits);
         if (queuedChatResponse) {
@@ -443,6 +445,10 @@ export class HeroScheduler {
     };
     const directiveHasSpatialReference = SPATIAL_DIRECTION_PATTERN.test(directive);
 
+    if (this.shouldPinParsedDirective(parsedDirective)) {
+      return this.pinDirectiveDecision(structuredDecision, parsedDirective);
+    }
+
     if (
       parsedDirective.targetId &&
       !structuredDecision.targetId &&
@@ -491,6 +497,40 @@ export class HeroScheduler {
 
   private appendDirectiveTag(rationaleTag: string, suffix: string): string {
     return rationaleTag.includes(suffix) ? rationaleTag : `${rationaleTag}_${suffix}`;
+  }
+
+  private shouldPinParsedDirective(parsedDirective: HeroDecision | null | undefined): boolean {
+    if (!parsedDirective?.moveToTile) {
+      return false;
+    }
+
+    return (
+      parsedDirective.intent === 'advance_to_point' ||
+      parsedDirective.intent === 'retreat_to_point'
+    );
+  }
+
+  private pinDirectiveDecision(decision: HeroDecision, parsedDirective: HeroDecision): HeroDecision {
+    const pinnedDecision: HeroDecision = {
+      ...decision,
+      intent: parsedDirective.intent,
+      moveToTile: parsedDirective.moveToTile ? { ...parsedDirective.moveToTile } : undefined,
+      targetId: parsedDirective.targetId,
+      rationaleTag: this.appendDirectiveTag(decision.rationaleTag, 'directive_pinned'),
+    };
+
+    if (!parsedDirective.groupOrders?.length) {
+      pinnedDecision.groupOrders = undefined;
+      pinnedDecision.groupOrderMode = undefined;
+      return pinnedDecision;
+    }
+
+    pinnedDecision.groupOrders = parsedDirective.groupOrders.map((groupOrder) => ({
+      ...groupOrder,
+      moveToTile: groupOrder.moveToTile ? { ...groupOrder.moveToTile } : undefined,
+    }));
+    pinnedDecision.groupOrderMode = parsedDirective.groupOrderMode;
+    return pinnedDecision;
   }
 
   private mergeGroupOrders(

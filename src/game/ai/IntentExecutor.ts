@@ -33,7 +33,7 @@ const ARCHER_RETREAT_LEASH = 90;
 const HERO_RETREAT_LEASH = 110;
 const FORMATION_SLOT_STICKINESS = 1.6;
 const HERO_ANCHOR_BIAS = 0.85;
-const ORDER_TILE_RETENTION_RADIUS = 2.5;
+const ORDER_TILE_HARD_RETENTION_RADIUS = 3.25;
 
 interface RoleOrderSpec {
   mode: UnitOrderMode;
@@ -396,6 +396,12 @@ export class IntentExecutor {
 
     const otherAllies = formationUnits.filter((ally) => ally.id !== unit.id);
     const occupiedTiles = otherAllies.map((ally) => ally.state.tile);
+    const retainedOrderTile = this.resolveRetainedOrderTile(unit, anchorTile, claimed);
+    if (retainedOrderTile) {
+      claimed.add(this.battleGrid.tileKey(retainedOrderTile));
+      return retainedOrderTile;
+    }
+
     const scoredCandidates = new Map<string, { tile: TileCoord; cost: number }>();
 
     for (const offset of template) {
@@ -412,17 +418,6 @@ export class IntentExecutor {
         tile: candidate,
         cost: this.scoreFormationCandidate(unit, candidate, anchorTile, occupiedTiles),
       });
-    }
-
-    const retainedOrderTile = this.resolveRetainedOrderTile(unit, anchorTile, claimed);
-    if (retainedOrderTile) {
-      const retainedKey = this.battleGrid.tileKey(retainedOrderTile);
-      if (!scoredCandidates.has(retainedKey)) {
-        scoredCandidates.set(retainedKey, {
-          tile: retainedOrderTile,
-          cost: this.scoreFormationCandidate(unit, retainedOrderTile, anchorTile, occupiedTiles),
-        });
-      }
     }
 
     const orderedCandidates = [...scoredCandidates.values()].sort((a, b) => {
@@ -479,7 +474,7 @@ export class IntentExecutor {
       return undefined;
     }
 
-    return this.battleGrid.distance(retained, anchorTile) <= ORDER_TILE_RETENTION_RADIUS
+    return this.battleGrid.distance(retained, anchorTile) <= ORDER_TILE_HARD_RETENTION_RADIUS
       ? retained
       : undefined;
   }

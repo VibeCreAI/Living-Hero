@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { EventBus } from '../../../../game/EventBus';
-import { BattleState, GroupOrder, HeroDecision, UnitGroup } from '../../../../game/types';
+import {
+  BattleState,
+  GroupOrder,
+  HeroDecision,
+  PathfindingBenchmarkResult,
+  UnitGroup,
+} from '../../../../game/types';
 
 interface DebugData {
   heroName: string;
@@ -23,11 +29,16 @@ interface DebugData {
   warriorExec: string;
   archerExec: string;
   recentHit: string;
+  pathJpsHits: number;
+  pathJpsRejects: number;
+  pathAStarFallbacks: number;
+  pathNoPath: number;
 }
 
 export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
   const [visible, setVisible] = useState(false);
   const [data, setData] = useState<DebugData | null>(null);
+  const [benchmarkResult, setBenchmarkResult] = useState<PathfindingBenchmarkResult | null>(null);
 
   useEffect(() => {
     const handler = (state: BattleState) => {
@@ -70,10 +81,19 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
           ? `${firstArcher.orderMode ?? 'none'} / ${firstArcher.orderTargetId ?? firstArcher.targetId ?? 'none'}`
           : 'none',
         recentHit: lastHit ? `${lastHit.attackerId} -> ${lastHit.targetId} (${lastHit.damage})` : 'none',
+        pathJpsHits: state.pathfindingStats.staticJpsHits,
+        pathJpsRejects: state.pathfindingStats.jpsConflictRejects,
+        pathAStarFallbacks: state.pathfindingStats.aStarFallbackCount,
+        pathNoPath: state.pathfindingStats.noPathCount,
       });
     };
 
+    const benchmarkHandler = (result: PathfindingBenchmarkResult) => {
+      setBenchmarkResult(result);
+    };
+
     EventBus.on('battle-state-update', handler);
+    EventBus.on('pathfinding-benchmark-result', benchmarkHandler);
 
     // Toggle with backtick key
     const keyHandler = (e: KeyboardEvent) => {
@@ -83,6 +103,7 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
 
     return () => {
       EventBus.removeListener('battle-state-update', handler);
+      EventBus.removeListener('pathfinding-benchmark-result', benchmarkHandler);
       window.removeEventListener('keydown', keyHandler);
     };
   }, [activeHeroId, visible]);
@@ -122,6 +143,10 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
     ['WarExec', data.warriorExec],
     ['RngExec', data.archerExec],
     ['RecentHit', data.recentHit],
+    ['JpsHits', String(data.pathJpsHits)],
+    ['JpsRej', String(data.pathJpsRejects)],
+    ['A*Back', String(data.pathAStarFallbacks)],
+    ['NoPath', String(data.pathNoPath)],
     ['Allies', String(data.alliedCount)],
     ['Enemies', String(data.enemyCount)],
     ['Time', `${data.timeSec.toFixed(1)}s`],
@@ -149,19 +174,35 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
         }}
       >
         <span>DEBUG</span>
-        <button
-          onClick={() => setVisible(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#ff6644',
-            cursor: 'pointer',
-            fontFamily: '"NeoDunggeunmoPro", monospace',
-            fontSize: '10px',
-          }}
-        >
-          [x]
-        </button>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <button
+            onClick={() => EventBus.emit('run-pathfinding-benchmark')}
+            style={{
+              background: 'none',
+              border: '1px solid #ff660066',
+              color: '#ffcc88',
+              cursor: 'pointer',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
+              fontSize: '10px',
+              padding: '1px 4px',
+            }}
+          >
+            bench
+          </button>
+          <button
+            onClick={() => setVisible(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#ff6644',
+              cursor: 'pointer',
+              fontFamily: '"NeoDunggeunmoPro", monospace',
+              fontSize: '10px',
+            }}
+          >
+            [x]
+          </button>
+        </div>
       </div>
       {rows.map(([label, value]) => (
         <div key={label} style={{ display: 'flex', gap: '8px', marginBottom: '1px' }}>
@@ -169,6 +210,13 @@ export function DebugPanel({ activeHeroId }: { activeHeroId: string | null }) {
           <span>{value}</span>
         </div>
       ))}
+      {benchmarkResult && (
+        <div style={{ marginTop: '6px', color: '#ffd4a1' }}>
+          Bench: {benchmarkResult.queryCount}q | hybrid {benchmarkResult.hybridTimeMs.toFixed(2)}ms
+          {' | '}
+          a* {benchmarkResult.aStarTimeMs.toFixed(2)}ms | mismatch {benchmarkResult.mismatchedCostCount}
+        </div>
+      )}
     </div>
   );
 }

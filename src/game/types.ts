@@ -26,6 +26,22 @@ export interface BattleGridSummary {
   tacticalAnchors: BattleTacticalAnchor[];
 }
 
+export interface PathfindingStats {
+  staticJpsHits: number;
+  jpsConflictRejects: number;
+  aStarFallbackCount: number;
+  noPathCount: number;
+}
+
+export interface PathfindingBenchmarkResult {
+  queryCount: number;
+  hybridTimeMs: number;
+  aStarTimeMs: number;
+  mismatchedCostCount: number;
+  hybridNoPathCount: number;
+  aStarNoPathCount: number;
+}
+
 export type BattleGridConfig = Omit<BattleGridSummary, 'blockedTiles' | 'tacticalAnchors'>;
 
 // Unit types
@@ -53,6 +69,20 @@ export interface UnitConfig {
   moveSpeed: number; // pixels per second
 }
 
+export interface UnitNavigationDebug {
+  desiredDestinationKey?: string;
+  desiredDestinationTile?: TileCoord;
+  activeDestinationKey?: string;
+  activeDestinationTile?: TileCoord;
+  pathHeadTile?: TileCoord;
+  replanReason?: string;
+  holdReason?: string;
+  lastStepFrom?: TileCoord;
+  lastStepTo?: TileCoord;
+  reservedPathKeys?: string[];
+  waitTimeSec?: number;
+}
+
 export interface UnitState {
   id: string;
   faction: UnitFaction;
@@ -77,10 +107,16 @@ export interface UnitState {
   orderRadiusTiles?: number;
   orderLeashTiles?: number;
   orderPreferredTargetRole?: UnitRole;
+  lastAttackTimeSec?: number;
+  lastDamageTakenTimeSec?: number;
+  lastDamagedById?: string;
+  combatLockUntilSec?: number;
+  combatLockTargetId?: string;
   pathTiles?: TileCoord[];
   nextTile?: TileCoord;
   reservedNextTile?: TileCoord;
   stepProgress?: number;
+  navigationDebug?: UnitNavigationDebug;
   state: UnitAnimState;
 }
 
@@ -199,6 +235,7 @@ export interface BattleState {
   heroes: HeroState[];
   obstacles: BattleObstacle[];
   recentDamage: DamageEvent[];
+  pathfindingStats: PathfindingStats;
 }
 
 export type BattleResult = 'allied_win' | 'enemy_win' | null;

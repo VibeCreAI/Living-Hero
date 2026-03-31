@@ -3,6 +3,8 @@ import { DamageEvent } from '../types';
 import { BattleGrid } from './BattleGrid';
 import { ObstacleSystem } from './Obstacles';
 
+const COMBAT_LOCK_DURATION_SEC = 1.5;
+
 export class CombatSystem {
   private battleGrid: BattleGrid | null = null;
   private obstacles: ObstacleSystem | null = null;
@@ -58,7 +60,26 @@ export class CombatSystem {
 
       if (attacker.canAttack(dt)) {
         const damage = attacker.performAttack();
+        attacker.state.lastAttackTimeSec = timeSec;
+        attacker.state.combatLockUntilSec = Math.max(
+          attacker.state.combatLockUntilSec ?? 0,
+          timeSec + COMBAT_LOCK_DURATION_SEC
+        );
+        attacker.state.combatLockTargetId = target.id;
+
         const appliedDamage = target.takeDamage(damage);
+        if (appliedDamage > 0) {
+          target.state.lastDamageTakenTimeSec = timeSec;
+          target.state.lastDamagedById = attacker.id;
+          if (target.state.orderMode !== 'retreat') {
+            target.state.combatLockUntilSec = Math.max(
+              target.state.combatLockUntilSec ?? 0,
+              timeSec + COMBAT_LOCK_DURATION_SEC
+            );
+            target.state.combatLockTargetId = attacker.id;
+          }
+        }
+
         const shouldShowTrainingHit =
           appliedDamage <= 0 && target.isPassive() && target.state.isInvulnerable === true;
         const eventDamage = shouldShowTrainingHit ? damage : appliedDamage;

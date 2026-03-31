@@ -10,6 +10,7 @@ import {
   UnitRole,
   PlayerChatMessageEvent,
   PortalFloorNumber,
+  PathfindingBenchmarkResult,
 } from '../types';
 import {
   createGroundTilemapLayer,
@@ -38,6 +39,7 @@ export class BattleScene extends Scene {
   private returnToOverworldHandler?: () => void;
   private replayBattleHandler?: () => void;
   private advanceFloorHandler?: () => void;
+  private pathfindingBenchmarkHandler?: () => void;
 
   constructor() {
     super('BattleScene');
@@ -140,6 +142,12 @@ export class BattleScene extends Scene {
     };
     EventBus.on('advance-to-next-floor', this.advanceFloorHandler);
 
+    this.pathfindingBenchmarkHandler = () => {
+      const result: PathfindingBenchmarkResult = this.battleLoop.runPathfindingBenchmark();
+      EventBus.emit('pathfinding-benchmark-result', result);
+    };
+    EventBus.on('run-pathfinding-benchmark', this.pathfindingBenchmarkHandler);
+
     EventBus.emit('current-scene-ready', this);
     EventBus.emit('battle-state-update', this.battleLoop.getState());
   }
@@ -213,6 +221,10 @@ export class BattleScene extends Scene {
     if (this.advanceFloorHandler) {
       EventBus.removeListener('advance-to-next-floor', this.advanceFloorHandler);
       this.advanceFloorHandler = undefined;
+    }
+    if (this.pathfindingBenchmarkHandler) {
+      EventBus.removeListener('run-pathfinding-benchmark', this.pathfindingBenchmarkHandler);
+      this.pathfindingBenchmarkHandler = undefined;
     }
     this.battleLoop.destroy();
   }
