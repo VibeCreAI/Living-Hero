@@ -715,7 +715,10 @@ export class MovementSystem {
       return false;
     }
 
-    return !this.hasCombatPriority(unit);
+    // Let advance orders keep using the tuned nearby-engagement rules when
+    // targeting has already identified a valid enemy. Otherwise the early
+    // order-move shortcut suppresses the later engage/step-out logic.
+    return !this.hasCombatPriority(unit) && !unit.state.targetId;
   }
 
   private hasCombatPriority(unit: Unit): boolean {
