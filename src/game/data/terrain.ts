@@ -4,7 +4,7 @@ import { PORTAL_LABEL, PORTAL_NODE_ID } from './portalFloors';
 export const OVERWORLD_NODES: OverworldNode[] = [
   {
     id: 'node-playground',
-    position: { x: 180, y: 160 },
+    position: { x: 680, y: 520 },
     label: 'Training Grounds',
     kind: 'node',
     difficulty: 0,
@@ -13,7 +13,7 @@ export const OVERWORLD_NODES: OverworldNode[] = [
   },
   {
     id: PORTAL_NODE_ID,
-    position: { x: 512, y: 384 },
+    position: { x: 960, y: 720 },
     label: PORTAL_LABEL,
     kind: 'portal',
     difficulty: 1,

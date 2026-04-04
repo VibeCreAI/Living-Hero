@@ -1,0 +1,4862 @@
+{
+  "version": 1,
+  "currentAtlasKey": "terrain-tileset",
+  "currentTemplateKey": "flat-guide",
+  "documents": {
+    "flat-guide": {
+      "version": 1,
+      "atlasKey": "terrain-tileset",
+      "templateKey": "flat-guide",
+      "width": 4,
+      "height": 4,
+      "cells": [
+        [
+          {
+            "label": "1",
+            "tileId": 1,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "flat",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "flat",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2",
+            "tileId": 2,
+            "rules": {
+              "edges": {
+                "north": "water",
+                "east": "flat",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "edge",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "3",
+            "tileId": 3,
+            "rules": {
+              "edges": {
+                "north": "water",
+                "east": "water",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "corner",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "water",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "13",
+            "tileId": 4,
+            "rules": {
+              "edges": {
+                "north": "water",
+                "east": "water",
+                "south": "flat",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "single",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "4",
+            "tileId": 10,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "flat",
+                "south": "flat",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "edge"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "5",
+            "tileId": 11,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "flat",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "center"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "6",
+            "tileId": 12,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "edge"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "14",
+            "tileId": 13,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "flat",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "single"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "7",
+            "tileId": 19,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "flat",
+                "south": "flat",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "edge"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "8",
+            "tileId": 20,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "flat",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "center"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "9",
+            "tileId": 21,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "edge"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "15",
+            "tileId": 22,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "flat",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "single"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "10",
+            "tileId": 28,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "flat",
+                "south": "water",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "corner",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "11",
+            "tileId": 29,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "flat",
+                "south": "water",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": false,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "edge",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "12",
+            "tileId": 30,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "water",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": false,
+                "west": true
+              },
+              "tags": [
+                "flat",
+                "corner",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          },
+          {
+            "label": "16",
+            "tileId": 31,
+            "rules": {
+              "edges": {
+                "north": "flat",
+                "east": "water",
+                "south": "water",
+                "west": "water"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "flat",
+                "single",
+                "shore"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "void",
+                "allowsAbove": [
+                  "overlay",
+                  "elevated",
+                  "cliff",
+                  "stair"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "elevated-guide": {
+      "version": 1,
+      "atlasKey": "terrain-tileset",
+      "templateKey": "elevated-guide",
+      "width": 4,
+      "height": 6,
+      "cells": [
+        [
+          {
+            "label": "1",
+            "tileId": 6,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "corner"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "2",
+            "tileId": 7,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "edge"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "3",
+            "tileId": 8,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "corner"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "13",
+            "tileId": 9,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "single"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "4",
+            "tileId": 15,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "edge"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "5",
+            "tileId": 16,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "center"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "6",
+            "tileId": 17,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "edge"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "14",
+            "tileId": 18,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "single"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "7",
+            "tileId": 24,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "edge"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "8",
+            "tileId": 25,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "center"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "9",
+            "tileId": 26,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "elevated",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "edge"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "15",
+            "tileId": 27,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "elevated",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "single"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "10",
+            "tileId": 33,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "cliff",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "lip"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "11",
+            "tileId": 34,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "elevated",
+                "south": "cliff",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": false,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "lip"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "12",
+            "tileId": 35,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "cliff",
+                "west": "elevated"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": false,
+                "west": true
+              },
+              "tags": [
+                "elevated",
+                "lip"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "16",
+            "tileId": 36,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "cliff",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "elevated",
+                "lip"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "17",
+            "tileId": 42,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "cliff",
+                "south": "flat",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "land"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "18",
+            "tileId": 43,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "cliff",
+                "south": "flat",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "land"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "19",
+            "tileId": 44,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "flat",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "land"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "20",
+            "tileId": 45,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "flat",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "land",
+                "single"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "21",
+            "tileId": 51,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "cliff",
+                "south": "water",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "water"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "water",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "22",
+            "tileId": 52,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "cliff",
+                "south": "water",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "water"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "water",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "23",
+            "tileId": 53,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "water",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "water"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "water",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "24",
+            "tileId": 54,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "void",
+                "south": "water",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [
+                "cliff",
+                "water",
+                "single"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "water",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "stairs-guide": {
+      "version": 1,
+      "atlasKey": "terrain-tileset",
+      "templateKey": "stairs-guide",
+      "width": 2,
+      "height": 2,
+      "cells": [
+        [
+          {
+            "label": "upper-left",
+            "tileId": 37,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "stair",
+                "south": "stair",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "stair",
+                "entry"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "upper-right",
+            "tileId": 40,
+            "rules": {
+              "edges": {
+                "north": "elevated",
+                "east": "cliff",
+                "south": "stair",
+                "west": "stair"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "stair",
+                "entry"
+              ],
+              "layer": {
+                "level": 2,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "lower-left",
+            "tileId": 46,
+            "rules": {
+              "edges": {
+                "north": "stair",
+                "east": "flat",
+                "south": "flat",
+                "west": "cliff"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": true,
+                "south": true,
+                "west": false
+              },
+              "tags": [
+                "stair",
+                "exit"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "stair",
+                  "overlay"
+                ]
+              }
+            }
+          },
+          {
+            "label": "lower-right",
+            "tileId": 49,
+            "rules": {
+              "edges": {
+                "north": "stair",
+                "east": "cliff",
+                "south": "flat",
+                "west": "flat"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": true,
+                "east": false,
+                "south": true,
+                "west": true
+              },
+              "tags": [
+                "stair",
+                "exit"
+              ],
+              "layer": {
+                "level": 1,
+                "requiresBelow": "flat",
+                "allowsAbove": [
+                  "stair",
+                  "overlay"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "freeform-9x6": {
+      "version": 1,
+      "atlasKey": "terrain-tileset",
+      "templateKey": "freeform-9x6",
+      "width": 9,
+      "height": 6,
+      "cells": [
+        [
+          {
+            "label": "0,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "0,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "1,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "1,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "2,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "2,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "3,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "3,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "4,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "4,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ],
+        [
+          {
+            "label": "5,0",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,1",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,2",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,3",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,4",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,5",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,6",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,7",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          },
+          {
+            "label": "5,8",
+            "tileId": 0,
+            "rules": {
+              "edges": {
+                "north": "void",
+                "east": "void",
+                "south": "void",
+                "west": "void"
+              },
+              "adjacency": {
+                "north": [],
+                "east": [],
+                "south": [],
+                "west": []
+              },
+              "passable": {
+                "north": false,
+                "east": false,
+                "south": false,
+                "west": false
+              },
+              "tags": [],
+              "layer": {
+                "level": 0,
+                "requiresBelow": "void",
+                "allowsAbove": []
+              }
+            }
+          }
+        ]
+      ]
+    }
+  },
+  "tileRulesByAtlas": {
+    "terrain-tileset": {
+      "1": {
+        "edges": {
+          "north": "water",
+          "east": "flat",
+          "south": "flat",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            2,
+            3,
+            11
+          ],
+          "south": [
+            10,
+            11,
+            19
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "2": {
+        "edges": {
+          "north": "water",
+          "east": "flat",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            2,
+            3,
+            11
+          ],
+          "south": [
+            11,
+            20
+          ],
+          "west": [
+            1,
+            2,
+            11
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "3": {
+        "edges": {
+          "north": "water",
+          "east": "water",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            11,
+            12,
+            21
+          ],
+          "west": [
+            1,
+            2,
+            11
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "4": {
+        "edges": {
+          "north": "water",
+          "east": "water",
+          "south": "flat",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            11,
+            13,
+            22
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "6": {
+        "edges": {
+          "north": "void",
+          "east": "elevated",
+          "south": "elevated",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            7,
+            8,
+            16
+          ],
+          "south": [
+            15,
+            16,
+            24
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "7": {
+        "edges": {
+          "north": "void",
+          "east": "elevated",
+          "south": "elevated",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            7,
+            8,
+            16
+          ],
+          "south": [
+            16,
+            25
+          ],
+          "west": [
+            6,
+            7,
+            16
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "8": {
+        "edges": {
+          "north": "void",
+          "east": "void",
+          "south": "elevated",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            16,
+            17,
+            26
+          ],
+          "west": [
+            6,
+            7,
+            16
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "9": {
+        "edges": {
+          "north": "void",
+          "east": "void",
+          "south": "elevated",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            16,
+            18,
+            27
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "10": {
+        "edges": {
+          "north": "flat",
+          "east": "flat",
+          "south": "flat",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [
+            1,
+            10,
+            11
+          ],
+          "east": [
+            11,
+            12
+          ],
+          "south": [
+            10,
+            11,
+            19
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "11": {
+        "edges": {
+          "north": "flat",
+          "east": "flat",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [
+            1,
+            2,
+            3,
+            4,
+            10,
+            11,
+            12,
+            13
+          ],
+          "east": [
+            2,
+            3,
+            11,
+            12,
+            20,
+            21,
+            29,
+            30
+          ],
+          "south": [
+            10,
+            11,
+            12,
+            13,
+            19,
+            20,
+            21,
+            22
+          ],
+          "west": [
+            1,
+            2,
+            10,
+            11,
+            19,
+            20,
+            28,
+            29
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "12": {
+        "edges": {
+          "north": "flat",
+          "east": "water",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [
+            3,
+            11,
+            12
+          ],
+          "east": [],
+          "south": [
+            11,
+            12,
+            21
+          ],
+          "west": [
+            10,
+            11
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "13": {
+        "edges": {
+          "north": "flat",
+          "east": "water",
+          "south": "flat",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [
+            4,
+            11,
+            13
+          ],
+          "east": [],
+          "south": [
+            11,
+            13,
+            22
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "15": {
+        "edges": {
+          "north": "elevated",
+          "east": "elevated",
+          "south": "elevated",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [
+            6,
+            15,
+            16
+          ],
+          "east": [
+            16,
+            17
+          ],
+          "south": [
+            15,
+            16,
+            24
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "16": {
+        "edges": {
+          "north": "elevated",
+          "east": "elevated",
+          "south": "elevated",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [
+            6,
+            7,
+            8,
+            9,
+            15,
+            16,
+            17,
+            18
+          ],
+          "east": [
+            7,
+            8,
+            16,
+            17,
+            25,
+            26,
+            34,
+            35
+          ],
+          "south": [
+            15,
+            16,
+            17,
+            18,
+            24,
+            25,
+            26,
+            27
+          ],
+          "west": [
+            6,
+            7,
+            15,
+            16,
+            24,
+            25,
+            33,
+            34
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "17": {
+        "edges": {
+          "north": "elevated",
+          "east": "void",
+          "south": "elevated",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [
+            8,
+            16,
+            17
+          ],
+          "east": [],
+          "south": [
+            16,
+            17,
+            26
+          ],
+          "west": [
+            15,
+            16
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "18": {
+        "edges": {
+          "north": "elevated",
+          "east": "void",
+          "south": "elevated",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [
+            9,
+            16,
+            18
+          ],
+          "east": [],
+          "south": [
+            16,
+            18,
+            27
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "19": {
+        "edges": {
+          "north": "flat",
+          "east": "flat",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [
+            1,
+            10,
+            11
+          ],
+          "east": [
+            11,
+            20,
+            21
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "20": {
+        "edges": {
+          "north": "flat",
+          "east": "flat",
+          "south": "water",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [
+            2,
+            11
+          ],
+          "east": [
+            11,
+            20,
+            21
+          ],
+          "south": [],
+          "west": [
+            11,
+            19,
+            20
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "21": {
+        "edges": {
+          "north": "flat",
+          "east": "water",
+          "south": "water",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [
+            3,
+            11,
+            12
+          ],
+          "east": [],
+          "south": [],
+          "west": [
+            11,
+            19,
+            20
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "22": {
+        "edges": {
+          "north": "flat",
+          "east": "water",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [
+            4,
+            11,
+            13
+          ],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "24": {
+        "edges": {
+          "north": "elevated",
+          "east": "elevated",
+          "south": "cliff",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [
+            6,
+            15,
+            16
+          ],
+          "east": [
+            16,
+            25,
+            26
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "25": {
+        "edges": {
+          "north": "elevated",
+          "east": "elevated",
+          "south": "cliff",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [
+            7,
+            16
+          ],
+          "east": [
+            16,
+            25,
+            26
+          ],
+          "south": [],
+          "west": [
+            16,
+            24,
+            25
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "26": {
+        "edges": {
+          "north": "elevated",
+          "east": "void",
+          "south": "cliff",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [
+            8,
+            16,
+            17
+          ],
+          "east": [],
+          "south": [],
+          "west": [
+            16,
+            24,
+            25
+          ]
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "27": {
+        "edges": {
+          "north": "elevated",
+          "east": "void",
+          "south": "cliff",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [
+            9,
+            16,
+            18
+          ],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "28": {
+        "edges": {
+          "north": "water",
+          "east": "flat",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            11,
+            29,
+            30
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "29": {
+        "edges": {
+          "north": "water",
+          "east": "flat",
+          "south": "water",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            11,
+            29,
+            30
+          ],
+          "south": [],
+          "west": [
+            11,
+            28,
+            29
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "30": {
+        "edges": {
+          "north": "water",
+          "east": "water",
+          "south": "water",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": [
+            11,
+            28,
+            29
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "31": {
+        "edges": {
+          "north": "water",
+          "east": "water",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 1,
+          "requiresBelow": "void",
+          "allowsAbove": [
+            "overlay",
+            "elevated",
+            "cliff",
+            "stair"
+          ]
+        }
+      },
+      "33": {
+        "edges": {
+          "north": "void",
+          "east": "elevated",
+          "south": "cliff",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            16,
+            34,
+            35
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "34": {
+        "edges": {
+          "north": "void",
+          "east": "elevated",
+          "south": "cliff",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            16,
+            34,
+            35
+          ],
+          "south": [],
+          "west": [
+            16,
+            33,
+            34
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "35": {
+        "edges": {
+          "north": "void",
+          "east": "void",
+          "south": "cliff",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": [
+            16,
+            33,
+            34
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "36": {
+        "edges": {
+          "north": "void",
+          "east": "void",
+          "south": "cliff",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "37": {
+        "edges": {
+          "north": "void",
+          "east": "elevated",
+          "south": "stair",
+          "west": "void"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            46
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": true,
+          "south": true,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "40": {
+        "edges": {
+          "north": "void",
+          "east": "void",
+          "south": "stair",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [
+            49
+          ],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": true,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "42": {
+        "edges": {
+          "north": "elevated",
+          "east": "cliff",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            43,
+            44
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "43": {
+        "edges": {
+          "north": "elevated",
+          "east": "cliff",
+          "south": "flat",
+          "west": "cliff"
+        },
+        "adjacency": {
+          "north": [
+            25,
+            34
+          ],
+          "east": [
+            43,
+            44
+          ],
+          "south": [],
+          "west": [
+            42,
+            43
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "44": {
+        "edges": {
+          "north": "elevated",
+          "east": "flat",
+          "south": "flat",
+          "west": "cliff"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": [
+            42,
+            43
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "45": {
+        "edges": {
+          "north": "elevated",
+          "east": "flat",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "46": {
+        "edges": {
+          "north": "stair",
+          "east": "elevated",
+          "south": "flat",
+          "west": "flat"
+        },
+        "adjacency": {
+          "north": [
+            37
+          ],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": false,
+          "south": false,
+          "west": true
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "stair",
+            "overlay"
+          ]
+        }
+      },
+      "49": {
+        "edges": {
+          "north": "stair",
+          "east": "flat",
+          "south": "flat",
+          "west": "elevated"
+        },
+        "adjacency": {
+          "north": [
+            40
+          ],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": true,
+          "east": true,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "flat",
+          "allowsAbove": [
+            "stair",
+            "overlay"
+          ]
+        }
+      },
+      "51": {
+        "edges": {
+          "north": "elevated",
+          "east": "cliff",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            52,
+            53
+          ],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "water",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "52": {
+        "edges": {
+          "north": "elevated",
+          "east": "cliff",
+          "south": "water",
+          "west": "cliff"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [
+            52,
+            53
+          ],
+          "south": [],
+          "west": [
+            51,
+            52
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "water",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "53": {
+        "edges": {
+          "north": "elevated",
+          "east": "water",
+          "south": "water",
+          "west": "cliff"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": [
+            51,
+            52
+          ]
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "water",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      },
+      "54": {
+        "edges": {
+          "north": "elevated",
+          "east": "water",
+          "south": "water",
+          "west": "water"
+        },
+        "adjacency": {
+          "north": [],
+          "east": [],
+          "south": [],
+          "west": []
+        },
+        "passable": {
+          "north": false,
+          "east": false,
+          "south": false,
+          "west": false
+        },
+        "layer": {
+          "level": 2,
+          "requiresBelow": "water",
+          "allowsAbove": [
+            "overlay"
+          ]
+        }
+      }
+    },
+    "terrain-tileset-2": {},
+    "terrain-tileset-alt": {},
+    "terrain-tileset-4": {},
+    "terrain-tileset-5": {}
+  }
+}

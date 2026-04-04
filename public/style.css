@@ -20,34 +20,40 @@ body {
     overflow: hidden;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
 }
 
 #scene-shell {
     position: relative;
-    width: 1024px;
-    height: 768px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 #battle-shell {
     position: relative;
-    width: 1348px;
-    height: 948px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 #game-stage {
     position: relative;
-    width: 1024px;
-    height: 768px;
+    flex: 1 1 0%;
+    min-height: 0;
 }
 
 #game-container {
-    width: 1024px;
-    height: 768px;
+    width: 100%;
+    height: 100%;
 }
 
 #game-container canvas {
     display: block;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .spritePosition {
@@ -79,5 +85,1251 @@ body {
         cursor: not-allowed;
         border: 1px solid rgba(255, 255, 255, 0.3);
         color: rgba(255, 255, 255, 0.3);
+    }
+}
+
+.tile-mapper-shell {
+    min-height: 100vh;
+    padding: 24px;
+    box-sizing: border-box;
+    background:
+        radial-gradient(circle at top left, rgba(113, 164, 109, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(62, 132, 133, 0.22), transparent 28%),
+        linear-gradient(180deg, #13201b 0%, #0f1713 100%);
+    color: #ecf5d5;
+}
+
+.tile-mapper-header,
+.tile-mapper-status,
+.tile-mapper-utility-panel,
+.tile-mapper-guide-panel,
+.tile-mapper-layout,
+.tile-mapper-export-layout {
+    max-width: 1520px;
+    margin: 0 auto;
+}
+
+.tile-mapper-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.tile-mapper-kicker {
+    margin: 0 0 8px;
+    color: #9cc66b;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.tile-mapper-header h1 {
+    margin: 0;
+    font-size: 32px;
+    color: #f5f4cf;
+}
+
+.tile-mapper-copy {
+    margin: 10px 0 0;
+    max-width: 720px;
+    color: #d5e8bc;
+    line-height: 1.5;
+}
+
+.tile-mapper-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    justify-content: flex-end;
+}
+
+.tile-mapper-actions label {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    color: #b9d9ad;
+}
+
+.tile-mapper-actions select {
+    min-width: 180px;
+    padding: 10px 12px;
+    border: 1px solid #4e6b4d;
+    background: #16231d;
+    color: #eef5d8;
+    font-family: inherit;
+}
+
+.tile-mapper-status {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid rgba(171, 214, 157, 0.2);
+    background: rgba(9, 15, 12, 0.72);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    color: #d6ebc2;
+    font-size: 13px;
+}
+
+.tile-mapper-layout,
+.tile-mapper-export-layout {
+    margin-top: 18px;
+    display: grid;
+    gap: 18px;
+}
+
+.tile-mapper-layout {
+    grid-template-columns: minmax(0, 1.05fr) minmax(560px, 0.95fr);
+    align-items: start;
+}
+
+.tile-mapper-export-layout {
+    grid-template-columns: 1fr 1fr;
+}
+
+.tile-mapper-panel {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(8, 12, 10, 0.72);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+}
+
+.tile-mapper-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.tile-mapper-panel-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #f5f4cf;
+}
+
+.tile-mapper-panel-header span {
+    color: #c2d9bb;
+    font-size: 12px;
+}
+
+.tile-mapper-inline-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.tile-mapper-button,
+.tile-mapper-link {
+    padding: 10px 14px;
+    border: 1px solid #5c7b55;
+    background: #1a281f;
+    color: #eff6d9;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.tile-mapper-button:hover,
+.tile-mapper-link:hover {
+    border-color: #9cc66b;
+    background: #223526;
+}
+
+.tile-mapper-button:disabled,
+.tile-mapper-direction-tab:disabled,
+.tile-mapper-allowed-tile:disabled,
+.tile-mapper-chip-button:disabled,
+.tile-mapper-rule-field input:disabled,
+.tile-mapper-rule-field select:disabled,
+.tile-mapper-passable-toggle input:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.tile-mapper-button:disabled:hover,
+.tile-mapper-direction-tab:disabled:hover,
+.tile-mapper-allowed-tile:disabled:hover,
+.tile-mapper-chip-button:disabled:hover {
+    border-color: rgba(171, 214, 157, 0.16);
+    background: inherit;
+}
+
+.tile-mapper-atlas {
+    position: relative;
+    border: 1px solid #405542;
+    image-rendering: pixelated;
+    background-color: #111;
+    overflow: hidden;
+}
+
+.tile-mapper-atlas-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+}
+
+.tile-mapper-atlas-tile {
+    position: absolute;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: #f7f5dc;
+    padding: 0;
+    cursor: pointer;
+}
+
+.tile-mapper-atlas-tile span {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 2px 5px;
+    background: rgba(0, 0, 0, 0.74);
+    font-size: 11px;
+}
+
+.tile-mapper-atlas-tile.is-selected {
+    border: 2px solid #f0db7d;
+    box-shadow: inset 0 0 0 1px #f0db7d;
+}
+
+.tile-mapper-board {
+    display: grid;
+    gap: 6px;
+    align-items: start;
+    justify-content: start;
+}
+
+.tile-mapper-board-stack {
+    display: grid;
+    gap: 18px;
+}
+
+.tile-mapper-stair-pairs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.tile-mapper-stair-pair-card {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(14, 22, 17, 0.72);
+}
+
+.tile-mapper-stair-pair-copy {
+    display: grid;
+    gap: 4px;
+}
+
+.tile-mapper-stair-pair-copy strong {
+    color: #f5f4cf;
+    font-size: 14px;
+}
+
+.tile-mapper-stair-pair-copy span {
+    color: #c2d9bb;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.tile-mapper-stair-pair-stack {
+    display: grid;
+    gap: 8px;
+    justify-content: start;
+}
+
+.tile-mapper-stair-pair-cell {
+    width: 72px;
+}
+
+.tile-mapper-utility-panel {
+    margin-top: 18px;
+}
+
+.tile-mapper-guide-panel {
+    margin-top: 18px;
+}
+
+.tile-mapper-guide-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    color: #f5f4cf;
+    list-style: none;
+}
+
+.tile-mapper-guide-summary::-webkit-details-marker {
+    display: none;
+}
+
+.tile-mapper-guide-summary span:last-child {
+    color: #c2d9bb;
+    font-size: 12px;
+}
+
+.tile-mapper-guide-panel[open] .tile-mapper-guide-summary {
+    margin-bottom: 14px;
+}
+
+.tile-mapper-utility-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    align-items: end;
+}
+
+.tile-mapper-utility-guide {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(14, 22, 17, 0.72);
+    color: #d8e8c8;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.tile-mapper-utility-guide strong {
+    color: #f5f4cf;
+}
+
+.tile-mapper-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.tile-mapper-guide-card {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(14, 22, 17, 0.72);
+    color: #d8e8c8;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.tile-mapper-guide-card strong {
+    color: #f5f4cf;
+    font-size: 14px;
+}
+
+.tile-mapper-utility-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.tile-mapper-utility-actions .tile-mapper-button {
+    white-space: nowrap;
+}
+
+.tile-mapper-utility-check {
+    display: grid;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(14, 22, 17, 0.72);
+    color: #d8e8c8;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.tile-mapper-utility-check strong {
+    color: #f5f4cf;
+}
+
+.tile-mapper-utility-check-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.tile-mapper-utility-check-card {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid rgba(171, 214, 157, 0.12);
+    background: rgba(9, 15, 12, 0.68);
+}
+
+.tile-mapper-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+    background: rgba(5, 10, 8, 0.82);
+    backdrop-filter: blur(4px);
+}
+
+.tile-mapper-modal {
+    width: min(1100px, 92vw);
+    max-height: 90vh;
+    overflow: auto;
+    padding: 24px;
+    border: 1px solid rgba(171, 214, 157, 0.18);
+    background: #101713;
+    box-shadow: 0 24px 90px rgba(0, 0, 0, 0.45);
+}
+
+.tile-mapper-modal-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+}
+
+.tile-mapper-sample-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.tile-mapper-sample-meta span {
+    padding: 7px 10px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(16, 24, 18, 0.88);
+    color: #dceccf;
+    font-size: 12px;
+}
+
+.tile-mapper-sample-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: end;
+    margin-top: 14px;
+}
+
+.tile-mapper-sample-control {
+    display: grid;
+    gap: 6px;
+    min-width: 180px;
+    color: #dceccf;
+    font-size: 12px;
+}
+
+.tile-mapper-sample-control select {
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid rgba(171, 214, 157, 0.18);
+    background: rgba(22, 38, 28, 0.9);
+    color: #eff7dc;
+}
+
+.tile-mapper-sample-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(16, 24, 18, 0.88);
+    color: #dceccf;
+    font-size: 12px;
+}
+
+.tile-mapper-sample-toggle input {
+    margin: 0;
+}
+
+.tile-mapper-sample-active-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(16, 24, 18, 0.88);
+    color: #dceccf;
+    font-size: 12px;
+}
+
+.tile-mapper-sample-failure {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(240, 219, 125, 0.38);
+    background: rgba(61, 44, 15, 0.42);
+    color: #f5e9bc;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.tile-mapper-diagnostic-summary {
+    display: grid;
+    gap: 4px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(17, 28, 21, 0.72);
+    color: #dceccf;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.tile-mapper-sample-stage {
+    margin-top: 18px;
+    overflow: auto;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background:
+        linear-gradient(180deg, rgba(80, 171, 173, 0.22), rgba(56, 136, 140, 0.24)),
+        #4caeb1;
+}
+
+.tile-mapper-sample-map {
+    position: relative;
+    margin: 0 auto;
+}
+
+.tile-mapper-sample-water {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(221, 251, 245, 0.08) 0, rgba(221, 251, 245, 0) 20%),
+        url('/assets/Terrain/Tileset/Water Background color.png'),
+        linear-gradient(180deg, #58b6b8 0%, #4caeb1 100%);
+    background-size:
+        auto,
+        64px 64px,
+        auto;
+    background-position:
+        0 0,
+        0 0,
+        0 0;
+    background-repeat:
+        no-repeat,
+        repeat,
+        no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-sample-tile {
+    position: absolute;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-sample-overlay {
+    position: absolute;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-sample-decoration {
+    position: absolute;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    transform-origin: center bottom;
+    filter: drop-shadow(0 2px 0 rgba(15, 25, 18, 0.22));
+}
+
+.tile-mapper-sample-decoration.is-tree {
+    filter: drop-shadow(0 3px 0 rgba(15, 25, 18, 0.22));
+}
+
+.tile-mapper-sample-decoration.is-water-rock {
+    opacity: 0.96;
+}
+
+.tile-mapper-sample-decoration.is-tree.is-animated {
+    animation: tile-mapper-tree-frames 1.33s steps(7, end) infinite;
+    will-change: background-position;
+}
+
+.tile-mapper-sample-decoration.is-bush.is-animated {
+    animation: tile-mapper-bush-frames 1.33s steps(7, end) infinite;
+    will-change: background-position;
+}
+
+.tile-mapper-sample-decoration.is-water-rock.is-animated {
+    animation: tile-mapper-water-rock-frames 2.66s steps(15, end) infinite;
+    will-change: background-position;
+}
+
+.tile-mapper-sample-conflict {
+    position: absolute;
+    pointer-events: none;
+    box-sizing: border-box;
+    border: 2px solid rgba(255, 110, 110, 0.95);
+    background: rgba(176, 35, 35, 0.12);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 214, 170, 0.45),
+        0 0 0 1px rgba(104, 17, 17, 0.7);
+}
+
+.tile-mapper-diagnostic-panel {
+    margin-top: 18px;
+    display: grid;
+    gap: 12px;
+}
+
+.tile-mapper-diagnostic-panel h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.tile-mapper-diagnostic-list {
+    display: grid;
+    gap: 10px;
+}
+
+.tile-mapper-diagnostic-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(15, 25, 18, 0.92);
+}
+
+.tile-mapper-diagnostic-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    color: #f3f6e4;
+    font-size: 13px;
+}
+
+.tile-mapper-diagnostic-meta,
+.tile-mapper-diagnostic-neighbors {
+    display: grid;
+    gap: 4px;
+    color: #c4d9b6;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.tile-mapper-sample-overlay.is-foam {
+    background-image: url('/assets/Terrain/Tileset/Water Foam.png');
+    background-size: 1600% 100%;
+    background-position: 0 0;
+    opacity: 0.92;
+    animation: tile-mapper-foam-frames 2.66s steps(15, end) infinite;
+    will-change: background-position;
+}
+
+.tile-mapper-sample-overlay.is-shadow {
+    background-image: url('/assets/Terrain/Tileset/Shadow.png');
+    background-size: 100% 100%;
+    opacity: 0.58;
+}
+
+@keyframes tile-mapper-foam-frames {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+@keyframes tile-mapper-tree-frames {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+@keyframes tile-mapper-bush-frames {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+@keyframes tile-mapper-water-rock-frames {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+.tile-mapper-runtime-grid {
+    display: grid;
+    gap: 18px;
+}
+
+.tile-mapper-board-wrapper {
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+}
+
+.tile-mapper-board-wrapper-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.tile-mapper-board-wrapper-header h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #f5f4cf;
+}
+
+.tile-mapper-board-wrapper-header p {
+    margin: 6px 0 0;
+    color: #b9d9ad;
+    font-size: 12px;
+    line-height: 1.4;
+    max-width: 460px;
+}
+
+.tile-mapper-board-cell {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    padding: 0;
+    border: 1px solid #465a47;
+    background-color: #101612;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    cursor: pointer;
+}
+
+.tile-mapper-board-cell:hover {
+    border-color: #9cc66b;
+}
+
+.tile-mapper-board-cell.is-active {
+    border-color: #f0db7d;
+    box-shadow: inset 0 0 0 1px #f0db7d;
+}
+
+.tile-mapper-board-label,
+.tile-mapper-board-id {
+    position: absolute;
+    left: 4px;
+    padding: 2px 5px;
+    background: rgba(0, 0, 0, 0.76);
+    font-size: 11px;
+}
+
+.tile-mapper-board-label {
+    top: 4px;
+    color: #f4f0cb;
+}
+
+.tile-mapper-board-id {
+    bottom: 4px;
+    color: #9dd5f7;
+}
+
+.tile-mapper-hint {
+    margin: 12px 0 0;
+    color: #b5cbad;
+    font-size: 12px;
+}
+
+.tile-mapper-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.tile-mapper-selection-card {
+    display: grid;
+    gap: 8px;
+    min-height: 120px;
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+    color: #d9ebcf;
+}
+
+.tile-mapper-selection-card strong {
+    color: #f5f4cf;
+    font-size: 13px;
+}
+
+.tile-mapper-selection-card span {
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.tile-mapper-selection-preview {
+    width: 72px;
+    height: 72px;
+    border: 1px solid #465a47;
+    background-color: #101612;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-slot-summary,
+.tile-mapper-inspector {
+    margin-top: 14px;
+}
+
+.tile-mapper-slot-summary {
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+}
+
+.tile-mapper-slot-summary-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: baseline;
+}
+
+.tile-mapper-slot-summary-header strong {
+    color: #f5f4cf;
+    font-size: 14px;
+}
+
+.tile-mapper-slot-summary-header span {
+    color: #b9d9ad;
+    font-size: 12px;
+}
+
+.tile-mapper-slot-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.tile-mapper-slot-summary-field {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(9, 15, 12, 0.68);
+}
+
+.tile-mapper-slot-summary-field span {
+    color: #b9d9ad;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.tile-mapper-slot-summary-field strong {
+    color: #eef5d8;
+    font-size: 13px;
+}
+
+.tile-mapper-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.tile-mapper-chip {
+    padding: 6px 10px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(31, 45, 34, 0.86);
+    color: #dceccf;
+    font-size: 11px;
+}
+
+.tile-mapper-chip.is-muted {
+    color: #9fb598;
+    background: rgba(15, 22, 18, 0.86);
+}
+
+.tile-mapper-chip-button {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tile-mapper-connection-editor {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+}
+
+.tile-mapper-direction-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.tile-mapper-direction-tab {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(9, 15, 12, 0.72);
+    color: #d9ebcf;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tile-mapper-direction-tab strong {
+    color: #f5f4cf;
+    font-size: 13px;
+}
+
+.tile-mapper-direction-tab.is-active,
+.tile-mapper-direction-tab:hover {
+    border-color: #9cc66b;
+    background: rgba(23, 39, 26, 0.9);
+}
+
+.tile-mapper-allowed-summary {
+    margin-top: 14px;
+}
+
+.tile-mapper-allowed-summary strong {
+    color: #f5f4cf;
+    font-size: 13px;
+}
+
+.tile-mapper-allowed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.tile-mapper-allowed-tile {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+    padding: 8px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(9, 15, 12, 0.72);
+    color: #d9ebcf;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tile-mapper-allowed-tile:hover,
+.tile-mapper-allowed-tile.is-active {
+    border-color: #9cc66b;
+    background: rgba(23, 39, 26, 0.9);
+}
+
+.tile-mapper-allowed-tile span {
+    font-size: 11px;
+}
+
+.tile-mapper-allowed-preview {
+    width: 56px;
+    height: 56px;
+    border: 1px solid #465a47;
+    background-color: #101612;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-rule-editor {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.tile-mapper-rule-column {
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+}
+
+.tile-mapper-rule-column h3 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: #f5f4cf;
+}
+
+.tile-mapper-rule-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.tile-mapper-rule-field {
+    display: grid;
+    gap: 6px;
+    color: #c2d9bb;
+    font-size: 12px;
+}
+
+.tile-mapper-rule-field-wide {
+    grid-column: 1 / -1;
+}
+
+.tile-mapper-rule-field input,
+.tile-mapper-rule-field select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #4e6b4d;
+    background: #16231d;
+    color: #eef5d8;
+    font-family: inherit;
+}
+
+.tile-mapper-passable-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.tile-mapper-passable-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #d9ebcf;
+    font-size: 12px;
+}
+
+.tile-mapper-passable-toggle input {
+    accent-color: #9cc66b;
+}
+
+.tile-mapper-rule-health {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(9, 15, 12, 0.68);
+    color: #d9ebcf;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.tile-mapper-rule-health.is-ok {
+    border-color: rgba(127, 201, 120, 0.32);
+    background: rgba(22, 45, 24, 0.45);
+}
+
+.tile-mapper-rule-health.is-warning {
+    border-color: rgba(240, 219, 125, 0.38);
+    background: rgba(61, 44, 15, 0.42);
+    color: #f5e9bc;
+}
+
+.tile-mapper-inspector-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.tile-mapper-inspector-card {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(14, 20, 17, 0.78);
+}
+
+.tile-mapper-inspector-card strong {
+    color: #f5f4cf;
+    font-size: 14px;
+}
+
+.tile-mapper-inspector-card > span {
+    color: #b9d9ad;
+    font-size: 12px;
+}
+
+.tile-mapper-inspector-list {
+    display: grid;
+    gap: 8px;
+    max-height: 260px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.tile-mapper-inspector-item {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(171, 214, 157, 0.14);
+    background: rgba(9, 15, 12, 0.72);
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.tile-mapper-inspector-item:hover {
+    border-color: #9cc66b;
+    background: rgba(19, 30, 22, 0.9);
+}
+
+.tile-mapper-inspector-preview {
+    width: 48px;
+    height: 48px;
+    border: 1px solid #465a47;
+    background-color: #101612;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+}
+
+.tile-mapper-inspector-copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.tile-mapper-inspector-copy strong {
+    color: #eef5d8;
+    font-size: 12px;
+}
+
+.tile-mapper-inspector-copy span {
+    color: #9fb598;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.tile-mapper-inspector-status {
+    padding: 5px 8px;
+    border: 1px solid rgba(171, 214, 157, 0.16);
+    background: rgba(19, 28, 20, 0.9);
+    color: #eef5d8;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.tile-mapper-inspector-status.is-two-way {
+    border-color: rgba(127, 201, 120, 0.32);
+    background: rgba(22, 45, 24, 0.72);
+}
+
+.tile-mapper-inspector-status.is-outbound-only,
+.tile-mapper-inspector-status.is-inbound-only {
+    border-color: rgba(240, 219, 125, 0.38);
+    background: rgba(61, 44, 15, 0.62);
+    color: #f5e9bc;
+}
+
+.tile-mapper-inspector-status.is-sealed,
+.tile-mapper-inspector-status.is-stack {
+    border-color: rgba(110, 157, 196, 0.26);
+    background: rgba(21, 33, 41, 0.72);
+    color: #d2e7f5;
+}
+
+.tile-mapper-inspector-empty {
+    color: #9fb598;
+    font-size: 12px;
+}
+
+.tile-mapper-advanced {
+    max-width: 1520px;
+    margin: 18px auto 0;
+}
+
+.tile-mapper-advanced > summary {
+    cursor: pointer;
+    padding: 14px 16px;
+    border: 1px solid rgba(171, 214, 157, 0.2);
+    background: rgba(9, 15, 12, 0.72);
+    color: #f5f4cf;
+    list-style: none;
+}
+
+.tile-mapper-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+.tile-mapper-advanced[open] > summary {
+    margin-bottom: 18px;
+}
+
+.tile-mapper-textarea {
+    width: 100%;
+    min-height: 260px;
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid #465a47;
+    background: #0e1411;
+    color: #eef5d8;
+    font-family: 'NeoDunggeunmoPro', monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+@media (max-width: 1280px) {
+    .tile-mapper-layout,
+    .tile-mapper-export-layout,
+    .tile-mapper-header,
+    .tile-mapper-status {
+        display: block;
+    }
+
+    .tile-mapper-actions {
+        margin-top: 16px;
+        justify-content: flex-start;
+    }
+
+    .tile-mapper-panel + .tile-mapper-panel {
+        margin-top: 18px;
+    }
+
+    .tile-mapper-status span + span {
+        display: block;
+        margin-top: 10px;
+    }
+
+    .tile-mapper-selection-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tile-mapper-slot-summary-header,
+    .tile-mapper-slot-summary-grid,
+    .tile-mapper-utility-grid,
+    .tile-mapper-direction-tabs,
+    .tile-mapper-rule-editor,
+    .tile-mapper-rule-grid,
+    .tile-mapper-passable-grid,
+    .tile-mapper-inspector-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tile-mapper-board-wrapper-header {
+        display: block;
+    }
+
+    .tile-mapper-board-wrapper-header .tile-mapper-button {
+        margin-top: 12px;
+    }
+
+    .tile-mapper-utility-actions {
+        flex-wrap: wrap;
     }
 }

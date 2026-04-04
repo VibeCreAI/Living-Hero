@@ -71,7 +71,26 @@ export class BootScene extends Scene {
       frameHeight: 128,
     });
     this.load.image('terrain-tileset', 'assets/Terrain/Tileset/Tilemap_color1.png');
+    this.load.image('terrain-tileset-2', 'assets/Terrain/Tileset/Tilemap_color2.png');
     this.load.image('terrain-tileset-alt', 'assets/Terrain/Tileset/Tilemap_color3.png');
+    this.load.image('terrain-tileset-4', 'assets/Terrain/Tileset/Tilemap_color4.png');
+    this.load.image('terrain-tileset-5', 'assets/Terrain/Tileset/Tilemap_color5.png');
+    this.load.image('terrain-shadow', 'assets/Terrain/Tileset/Shadow.png');
+
+    // Water & foam
+    this.load.image('water-bg', 'assets/Terrain/Tileset/Water Background color.png');
+    this.load.spritesheet('water-foam', 'assets/Terrain/Tileset/Water Foam.png', { frameWidth: 192, frameHeight: 192 });
+
+    // Trees (spritesheets for idle sway animation)
+    this.load.spritesheet('tree-1', 'assets/Terrain/Resources/Wood/Trees/Tree1.png', { frameWidth: 192, frameHeight: 256 });
+    this.load.spritesheet('tree-2', 'assets/Terrain/Resources/Wood/Trees/Tree2.png', { frameWidth: 192, frameHeight: 256 });
+    this.load.spritesheet('tree-3', 'assets/Terrain/Resources/Wood/Trees/Tree3.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('tree-4', 'assets/Terrain/Resources/Wood/Trees/Tree4.png', { frameWidth: 192, frameHeight: 192 });
+
+    // Water rocks
+    this.load.spritesheet('water-rock-1', 'assets/Terrain/Decorations/Rocks in the Water/Water Rocks_01.png', { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('water-rock-2', 'assets/Terrain/Decorations/Rocks in the Water/Water Rocks_02.png', { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('water-rock-3', 'assets/Terrain/Decorations/Rocks in the Water/Water Rocks_03.png', { frameWidth: 64, frameHeight: 64 });
     this.load.image('terrain-rock-1', 'assets/Terrain/Decorations/Rocks/Rock1.png');
     this.load.image('terrain-rock-2', 'assets/Terrain/Decorations/Rocks/Rock2.png');
     this.load.image('terrain-rock-3', 'assets/Terrain/Decorations/Rocks/Rock3.png');
@@ -80,10 +99,15 @@ export class BootScene extends Scene {
     this.load.image('terrain-bush-2', 'assets/Terrain/Decorations/Bushes/Bushe2.png');
     this.load.image('terrain-bush-3', 'assets/Terrain/Decorations/Bushes/Bushe3.png');
     this.load.image('terrain-bush-4', 'assets/Terrain/Decorations/Bushes/Bushe4.png');
+    this.load.spritesheet('terrain-bush-1-sheet', 'assets/Terrain/Decorations/Bushes/Bushe1.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('terrain-bush-2-sheet', 'assets/Terrain/Decorations/Bushes/Bushe2.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('terrain-bush-3-sheet', 'assets/Terrain/Decorations/Bushes/Bushe3.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('terrain-bush-4-sheet', 'assets/Terrain/Decorations/Bushes/Bushe4.png', { frameWidth: 128, frameHeight: 128 });
     this.load.image('terrain-cloud-1', 'assets/Terrain/Decorations/Clouds/Clouds_01.png');
     this.load.image('terrain-cloud-2', 'assets/Terrain/Decorations/Clouds/Clouds_02.png');
     this.load.image('terrain-cloud-3', 'assets/Terrain/Decorations/Clouds/Clouds_03.png');
     this.load.image('terrain-cloud-4', 'assets/Terrain/Decorations/Clouds/Clouds_04.png');
+    this.load.text('tile-mapper-workspace', 'dev/tile-mapper.workspace.json');
     this.load.image('ui-smallbar-base', 'assets/UI Elements/UI Elements/Bars/SmallBar_Base.png');
     this.load.image('ui-smallbar-fill', 'assets/UI Elements/UI Elements/Bars/SmallBar_Fill.png');
     this.load.image('ui-bigbar-base', 'assets/UI Elements/UI Elements/Bars/BigBar_Base.png');
@@ -135,6 +159,22 @@ export class BootScene extends Scene {
     this.anims.create({ key: 'red-archer-run-anim', frames: this.anims.generateFrameNumbers('red-archer-run', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
     this.anims.create({ key: 'red-archer-attack-anim', frames: this.anims.generateFrameNumbers('red-archer-attack', { start: 0, end: 7 }), frameRate: 8, repeat: 0 });
     this.anims.create({ key: 'portal-main-anim', frames: this.anims.generateFrameNumbers('portal-main', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+
+    // Water foam animation (16 frames at 192x192)
+    this.anims.create({ key: 'water-foam-anim', frames: this.anims.generateFrameNumbers('water-foam', { start: 0, end: 15 }), frameRate: 6, repeat: -1 });
+    // Tree idle sway animations
+    this.anims.create({ key: 'tree-1-anim', frames: this.anims.generateFrameNumbers('tree-1', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'tree-2-anim', frames: this.anims.generateFrameNumbers('tree-2', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'tree-3-anim', frames: this.anims.generateFrameNumbers('tree-3', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'tree-4-anim', frames: this.anims.generateFrameNumbers('tree-4', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'terrain-bush-1-anim', frames: this.anims.generateFrameNumbers('terrain-bush-1-sheet', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'terrain-bush-2-anim', frames: this.anims.generateFrameNumbers('terrain-bush-2-sheet', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'terrain-bush-3-anim', frames: this.anims.generateFrameNumbers('terrain-bush-3-sheet', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'terrain-bush-4-anim', frames: this.anims.generateFrameNumbers('terrain-bush-4-sheet', { start: 0, end: 7 }), frameRate: 6, repeat: -1 });
+    // Water rocks animations (16 frames at 64x64)
+    this.anims.create({ key: 'water-rock-1-anim', frames: this.anims.generateFrameNumbers('water-rock-1', { start: 0, end: 15 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'water-rock-2-anim', frames: this.anims.generateFrameNumbers('water-rock-2', { start: 0, end: 15 }), frameRate: 6, repeat: -1 });
+    this.anims.create({ key: 'water-rock-3-anim', frames: this.anims.generateFrameNumbers('water-rock-3', { start: 0, end: 15 }), frameRate: 6, repeat: -1 });
 
     for (const variant of Object.values(ENEMY_VARIANT_DEFINITIONS)) {
       createAnimation(this, `${variant.animationPrefix}-idle-anim`, variant.idle.textureKey, variant.idle.frameCount, 8, -1);

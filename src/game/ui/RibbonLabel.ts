@@ -9,6 +9,7 @@ interface RibbonLabelOptions {
   ribbonScale?: number;
   fontSizePx?: number;
   textScale?: number;
+  scrollFactor?: number;
 }
 
 const FRAME_BASE_BY_TONE: Record<RibbonTone, number> = {
@@ -94,6 +95,14 @@ export function addRibbonLabel(
   );
   rightCap.setDisplaySize(capSize, capSize);
   rightCap.setDepth(depth + 0.01);
+
+  if (options.scrollFactor !== undefined) {
+    const sf = options.scrollFactor;
+    labelText.setScrollFactor(sf);
+    center.setScrollFactor(sf);
+    leftCap.setScrollFactor(sf);
+    rightCap.setScrollFactor(sf);
+  }
 
   return labelText;
 }

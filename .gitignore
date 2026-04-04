@@ -30,3 +30,6 @@ src-tauri/binaries/ollama-*
 
 # Local Codex artifacts
 .codex_artifacts/
+
+# Local Playwright MCP
+.playwright-mcp/
