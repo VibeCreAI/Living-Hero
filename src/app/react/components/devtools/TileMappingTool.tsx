@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ATLAS_OPTIONS,
-  AuthoredTileRules,
   AtlasKey,
   createDocument,
   createWorkspace,
@@ -9,6 +8,7 @@ import {
   GRAMMAR_SOCKETS,
   getAuthoredTileRules,
   getDocument,
+  getTerrainAtlasMapping,
   GrammarDirection,
   GrammarSocket,
   isMappingDocument,
@@ -86,13 +86,23 @@ type SampleSettings = {
 };
 
 type SampleLayerView = 'total' | 'flat' | 'elevated';
-
-type RepoComparison = {
-  matches: boolean;
-  mismatchedTileIds: number[];
-  mismatchedBoards: TemplateKey[];
-  repoSelectedTileRules: AuthoredTileRules | null;
+type SamplePawnFacing = 'left' | 'right';
+type SamplePawnState = {
+  x: number;
+  y: number;
+  facing: SamplePawnFacing;
+  moving: boolean;
 };
+type SampleWalkCell = {
+  row: number;
+  col: number;
+  terrainLevel: number;
+  passable: Record<GrammarDirection, boolean>;
+};
+
+const SAMPLE_PAWN_SPEED = 104;
+const SAMPLE_PAWN_COLLISION_RADIUS = 8;
+const SAMPLE_PAWN_FOOT_OFFSET_Y = 12;
 
 const SLOT_TITLES: Partial<Record<TemplateKey, Record<string, string>>> = {
   'flat-guide': {
@@ -180,16 +190,29 @@ export function TileMappingTool() {
   const [sampleMap, setSampleMap] = useState<WfcSampleMap | null>(null);
   const [sampleLayerView, setSampleLayerView] = useState<SampleLayerView>('total');
   const [showSampleConflicts, setShowSampleConflicts] = useState(true);
+  const [sampleZoom, setSampleZoom] = useState(1);
+  const [samplePawnEnabled, setSamplePawnEnabled] = useState(false);
+  const [samplePawn, setSamplePawn] = useState<SamplePawnState | null>(null);
   const [sampleSettings, setSampleSettings] = useState<SampleSettings>({
     cols: 18,
     rows: 12,
     randomness: 35,
   });
+  const [sampleColsInput, setSampleColsInput] = useState('18');
+  const [sampleRowsInput, setSampleRowsInput] = useState('12');
   const [statusText, setStatusText] = useState(
     'Autosaved in the browser. Reload the game page after edits to see the new terrain mapping.',
   );
-  const [repoComparison, setRepoComparison] = useState<RepoComparison | null>(null);
   const [hasAttemptedRepoBootstrap, setHasAttemptedRepoBootstrap] = useState(false);
+  const sampleViewportRef = useRef<HTMLDivElement | null>(null);
+  const samplePawnNodeRef = useRef<HTMLDivElement | null>(null);
+  const samplePawnStateRef = useRef<SamplePawnState | null>(null);
+  const sampleMovementRef = useRef<Record<GrammarDirection, boolean>>({
+    north: false,
+    east: false,
+    south: false,
+    west: false,
+  });
 
   const activeDocument = getDocument(workspace, activeCell.templateKey);
   const activeSlot = activeDocument.cells[activeCell.row]?.[activeCell.col];
@@ -322,6 +345,270 @@ export function TileMappingTool() {
         : sampleLayerView === 'elevated'
           ? sampleMap.elevatedConflictCells
           : sampleMap.conflictCells;
+  const sampleElevatedLevels = sampleMap
+    ? Array.from(new Set(sampleMap.elevatedTiles.map((tile) => tile.terrainLevel))).sort(
+        (left, right) => left - right,
+      )
+    : [];
+  const sampleWalkCells = useMemo(
+    () => buildSampleWalkCells(sampleMap, workspace),
+    [sampleMap, workspace],
+  );
+  const syncSamplePawnPresentation = (
+    pawn: SamplePawnState | null,
+    options?: { viewport?: HTMLDivElement | null; centerCamera?: boolean },
+  ) => {
+    const node = samplePawnNodeRef.current;
+    if (!node || !sampleMap) {
+      return;
+    }
+
+    if (!samplePawnEnabled || !pawn) {
+      node.style.display = 'none';
+      return;
+    }
+
+    const tile = getSampleMovementTile(pawn.x, pawn.y);
+    const cell = tile ? sampleWalkCells.get(`${tile.row},${tile.col}`) ?? null : null;
+    const visible =
+      cell != null &&
+      !(
+        (sampleLayerView === 'flat' && cell.terrainLevel !== 1) ||
+        (sampleLayerView === 'elevated' && cell.terrainLevel <= 1)
+      );
+
+    node.style.display = visible ? 'block' : 'none';
+    if (!visible) {
+      return;
+    }
+
+    const width = SAMPLE_TILE_SIZE * 1.55;
+    const height = SAMPLE_TILE_SIZE * 1.55;
+    const feetY = pawn.y + SAMPLE_PAWN_FOOT_OFFSET_Y;
+    node.style.left = `${pawn.x - width / 2}px`;
+    node.style.top = `${pawn.y - height / 2}px`;
+    node.style.zIndex = `${Math.round(feetY * 10)}`;
+    node.className = `tile-mapper-sample-pawn${pawn.moving ? ' is-moving' : ''}${pawn.facing === 'left' ? ' is-facing-left' : ''}`;
+
+    if (options?.centerCamera && options.viewport) {
+      const maxScrollLeft = Math.max(0, options.viewport.scrollWidth - options.viewport.clientWidth);
+      const maxScrollTop = Math.max(0, options.viewport.scrollHeight - options.viewport.clientHeight);
+      const targetLeft = clamp(
+        pawn.x * sampleZoom - options.viewport.clientWidth / 2,
+        0,
+        maxScrollLeft,
+      );
+      const targetTop = clamp(
+        pawn.y * sampleZoom - options.viewport.clientHeight / 2,
+        0,
+        maxScrollTop,
+      );
+      options.viewport.scrollTo(targetLeft, targetTop);
+    }
+  };
+
+  const spawnSamplePawn = () => {
+    if (!sampleMap) {
+      return;
+    }
+    sampleMovementRef.current = { north: false, east: false, south: false, west: false };
+    const spawn = pickSamplePawnSpawn(sampleMap, sampleWalkCells);
+    if (!spawn) {
+      setStatusText('No walkable tile is available in the current sample map for the pawn.');
+      return;
+    }
+    const nextPawn = {
+      x: (spawn.col + 0.5) * SAMPLE_TILE_SIZE,
+      y: (spawn.row + 0.5) * SAMPLE_TILE_SIZE,
+      facing: 'right',
+      moving: false,
+    };
+    samplePawnStateRef.current = nextPawn;
+    setSamplePawn(nextPawn);
+    setSamplePawnEnabled(true);
+    setSampleZoom(1.2);
+  };
+
+  useEffect(() => {
+    if (!sampleMap) {
+      setSamplePawn(null);
+      setSamplePawnEnabled(false);
+      sampleMovementRef.current = { north: false, east: false, south: false, west: false };
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const viewport = sampleViewportRef.current;
+      if (!viewport) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const movementDirection =
+        key === 'arrowup' || key === 'w'
+          ? 'north'
+          : key === 'arrowdown' || key === 's'
+            ? 'south'
+            : key === 'arrowleft' || key === 'a'
+              ? 'west'
+              : key === 'arrowright' || key === 'd'
+                ? 'east'
+                : null;
+
+      if (samplePawnEnabled && movementDirection) {
+        sampleMovementRef.current[movementDirection] = true;
+        event.preventDefault();
+        return;
+      }
+
+      const panAmount = 96;
+      if (event.key === 'ArrowUp') {
+        viewport.scrollTop -= panAmount;
+        event.preventDefault();
+      } else if (event.key === 'ArrowDown') {
+        viewport.scrollTop += panAmount;
+        event.preventDefault();
+      } else if (event.key === 'ArrowLeft') {
+        viewport.scrollLeft -= panAmount;
+        event.preventDefault();
+      } else if (event.key === 'ArrowRight') {
+        viewport.scrollLeft += panAmount;
+        event.preventDefault();
+      } else if ((event.key === '+' || event.key === '=') && sampleZoom < 2) {
+        setSampleZoom((current) => Math.min(2, Math.round((current + 0.25) * 100) / 100));
+        event.preventDefault();
+      } else if ((event.key === '-' || event.key === '_') && sampleZoom > 0.5) {
+        setSampleZoom((current) => Math.max(0.5, Math.round((current - 0.25) * 100) / 100));
+        event.preventDefault();
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!samplePawnEnabled) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const movementDirection =
+        key === 'arrowup' || key === 'w'
+          ? 'north'
+          : key === 'arrowdown' || key === 's'
+            ? 'south'
+            : key === 'arrowleft' || key === 'a'
+              ? 'west'
+              : key === 'arrowright' || key === 'd'
+                ? 'east'
+                : null;
+      if (!movementDirection) {
+        return;
+      }
+      sampleMovementRef.current[movementDirection] = false;
+      event.preventDefault();
+    };
+
+    const clearMovement = () => {
+      sampleMovementRef.current = { north: false, east: false, south: false, west: false };
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', clearMovement);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', clearMovement);
+    };
+  }, [sampleMap, samplePawnEnabled, sampleZoom]);
+
+  useEffect(() => {
+    if (!sampleMap || !samplePawnEnabled) {
+      return;
+    }
+
+    const spawn = pickSamplePawnSpawn(sampleMap, sampleWalkCells);
+    if (!spawn) {
+      samplePawnStateRef.current = null;
+      setSamplePawn(null);
+      return;
+    }
+
+    const current = samplePawnStateRef.current;
+    const currentTile = current ? getSampleMovementTile(current.x, current.y) : null;
+    if (current && currentTile && sampleWalkCells.has(`${currentTile.row},${currentTile.col}`)) {
+      syncSamplePawnPresentation(current, {
+        viewport: sampleViewportRef.current,
+        centerCamera: true,
+      });
+      return;
+    }
+
+    const nextPawn = {
+      x: (spawn.col + 0.5) * SAMPLE_TILE_SIZE,
+      y: (spawn.row + 0.5) * SAMPLE_TILE_SIZE,
+      facing: 'right' as SamplePawnFacing,
+      moving: false,
+    };
+    samplePawnStateRef.current = nextPawn;
+    setSamplePawn(nextPawn);
+  }, [sampleMap, samplePawnEnabled, sampleWalkCells]);
+
+  useEffect(() => {
+    if (!samplePawnEnabled || !samplePawnStateRef.current) {
+      return;
+    }
+    setSampleZoom(1.2);
+  }, [samplePawnEnabled]);
+
+  useEffect(() => {
+    syncSamplePawnPresentation(samplePawnStateRef.current, {
+      viewport: sampleViewportRef.current,
+      centerCamera: samplePawnEnabled,
+    });
+  }, [samplePawnEnabled, sampleZoom, sampleMap, sampleLayerView, sampleWalkCells, samplePawn]);
+
+  useEffect(() => {
+    if (!samplePawnEnabled) {
+      return;
+    }
+
+    let frameId = 0;
+    let lastTime = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+      const current = samplePawnStateRef.current;
+      if (current) {
+        const next = advanceSamplePawnState(current, sampleMovementRef.current, sampleWalkCells, dt);
+        samplePawnStateRef.current = next;
+        syncSamplePawnPresentation(next, {
+          viewport: sampleViewportRef.current,
+          centerCamera: true,
+        });
+      }
+      frameId = window.requestAnimationFrame(tick);
+    };
+
+    frameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [samplePawnEnabled, sampleWalkCells]);
+
+  useEffect(() => {
+    setSampleColsInput(String(sampleSettings.cols));
+  }, [sampleSettings.cols]);
+
+  useEffect(() => {
+    setSampleRowsInput(String(sampleSettings.rows));
+  }, [sampleSettings.rows]);
 
   const ensureEditableAtlas = (): boolean => {
     if (isEditableAtlas) {
@@ -620,57 +907,9 @@ export function TileMappingTool() {
     try {
       const nextWorkspace = await fetchRepoWorkspace();
       setWorkspace(nextWorkspace);
-      setRepoComparison(null);
       setStatusText(`Loaded repo workspace from public/dev/${REPO_WORKSPACE_FILENAME}.`);
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : 'Failed to load repo workspace file.');
-    }
-  };
-
-  const compareRepoFile = async () => {
-    try {
-      const repoWorkspace = await fetchRepoWorkspace();
-      const currentWorkspace = normalizeSharedWorkspace(prepareWorkspace(workspace));
-      const currentRules = currentWorkspace.tileRulesByAtlas?.[SHARED_EDIT_ATLAS_KEY] ?? {};
-      const repoRules = repoWorkspace.tileRulesByAtlas?.[SHARED_EDIT_ATLAS_KEY] ?? {};
-      const allTileIds = Array.from(
-        new Set([...Object.keys(currentRules), ...Object.keys(repoRules)].map((value) => Number(value))),
-      )
-        .filter((value) => Number.isInteger(value) && value > 0)
-        .sort((left, right) => left - right);
-      const mismatchedTileIds = allTileIds.filter((tileId) => {
-        const currentRule = currentRules[`${tileId}`] ?? null;
-        const repoRule = repoRules[`${tileId}`] ?? null;
-        return JSON.stringify(currentRule) !== JSON.stringify(repoRule);
-      });
-      const mismatchedBoards = RUNTIME_TEMPLATE_KEYS.filter((templateKey) => {
-        const currentDocument = getDocument(currentWorkspace, templateKey, SHARED_EDIT_ATLAS_KEY);
-        const repoDocument = getDocument(repoWorkspace, templateKey, SHARED_EDIT_ATLAS_KEY);
-        const currentCells = currentDocument.cells.map((row) => row.map((cell) => cell.tileId));
-        const repoCells = repoDocument.cells.map((row) => row.map((cell) => cell.tileId));
-        return JSON.stringify(currentCells) !== JSON.stringify(repoCells);
-      });
-      const repoSelectedTileRules = getAuthoredTileRules(repoWorkspace, SHARED_EDIT_ATLAS_KEY, selectedTileId, {
-        edges: placementUsingSelectedTile?.cell.rules.edges,
-        adjacency: placementUsingSelectedTile?.cell.rules.adjacency,
-        passable: placementUsingSelectedTile?.cell.rules.passable,
-        layer: placementUsingSelectedTile?.cell.rules.layer,
-      });
-
-      setRepoComparison({
-        matches: mismatchedTileIds.length === 0 && mismatchedBoards.length === 0,
-        mismatchedTileIds,
-        mismatchedBoards,
-        repoSelectedTileRules,
-      });
-      setStatusText(
-        mismatchedTileIds.length === 0 && mismatchedBoards.length === 0
-          ? `Current tool state matches public/dev/${REPO_WORKSPACE_FILENAME}.`
-          : `Current tool state differs from repo file for ${mismatchedTileIds.length} tile rules and ${mismatchedBoards.length} boards.`,
-      );
-    } catch (error) {
-      setStatusText(error instanceof Error ? error.message : 'Failed to compare repo workspace file.');
-      setRepoComparison(null);
     }
   };
 
@@ -955,57 +1194,9 @@ export function TileMappingTool() {
           <span>2. Click `Save Snapshot` for a quick browser-only safety copy.</span>
           <span>3. Click `Download Repo File` and save it as `public/dev/tile-mapper.workspace.json`.</span>
           <span>4. Click `Load Repo File` to confirm the file-backed state is what the tool will use.</span>
-          <span>5. Click `Generate Sample Map` to test the saved repo-file rules.</span>
+          <span>5. Click `Generate Sample Map`, then tweak cols, rows, and randomness inside the sample modal.</span>
         </div>
         <div className="tile-mapper-utility-grid">
-          <label className="tile-mapper-rule-field">
-            <span>Sample Cols</span>
-            <input
-              type="number"
-              min={10}
-              max={40}
-              step={1}
-              value={sampleSettings.cols}
-              onChange={(event) =>
-                setSampleSettings((current) => ({
-                  ...current,
-                  cols: Number(event.target.value) || current.cols,
-                }))
-              }
-            />
-          </label>
-          <label className="tile-mapper-rule-field">
-            <span>Sample Rows</span>
-            <input
-              type="number"
-              min={8}
-              max={28}
-              step={1}
-              value={sampleSettings.rows}
-              onChange={(event) =>
-                setSampleSettings((current) => ({
-                  ...current,
-                  rows: Number(event.target.value) || current.rows,
-                }))
-              }
-            />
-          </label>
-          <label className="tile-mapper-rule-field tile-mapper-rule-field-wide">
-            <span>Randomness {sampleSettings.randomness}%</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={sampleSettings.randomness}
-              onChange={(event) =>
-                setSampleSettings((current) => ({
-                  ...current,
-                  randomness: Number(event.target.value) || 0,
-                }))
-              }
-            />
-          </label>
           <div className="tile-mapper-utility-actions">
             <button type="button" className="tile-mapper-button" onClick={saveSnapshot}>
               Save Snapshot
@@ -1016,49 +1207,11 @@ export function TileMappingTool() {
             <button type="button" className="tile-mapper-button" onClick={loadRepoFile}>
               Load Repo File
             </button>
-            <button type="button" className="tile-mapper-button" onClick={compareRepoFile}>
-              Compare Repo File
-            </button>
             <button type="button" className="tile-mapper-button" onClick={openSampleMap}>
               Generate Sample Map
             </button>
           </div>
         </div>
-        {repoComparison ? (
-          <div className="tile-mapper-utility-check">
-            <strong>
-              {repoComparison.matches
-                ? 'Repo file matches current tool state.'
-                : 'Repo file differs from current tool state.'}
-            </strong>
-            <span>
-              Tile-rule mismatches:{' '}
-              {repoComparison.mismatchedTileIds.length > 0
-                ? repoComparison.mismatchedTileIds.slice(0, 20).join(', ')
-                : 'none'}
-            </span>
-            <span>
-              Board mismatches:{' '}
-              {repoComparison.mismatchedBoards.length > 0
-                ? repoComparison.mismatchedBoards.join(', ')
-                : 'none'}
-            </span>
-            <div className="tile-mapper-utility-check-grid">
-              <div className="tile-mapper-utility-check-card">
-                <strong>Current Tile {selectedTileId}</strong>
-                <span>{summarizeRuleDirections(selectedTileRules)}</span>
-              </div>
-              <div className="tile-mapper-utility-check-card">
-                <strong>Repo Tile {selectedTileId}</strong>
-                <span>
-                  {repoComparison.repoSelectedTileRules
-                    ? summarizeRuleDirections(repoComparison.repoSelectedTileRules)
-                    : 'No repo rule found'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </section>
 
       <details className="tile-mapper-panel tile-mapper-guide-panel">
@@ -1649,9 +1802,76 @@ export function TileMappingTool() {
               <span>{Math.round(sampleMap.randomness * 100)}% randomness</span>
               <span>{sampleMap.stats.landTiles} flat tiles</span>
               <span>{sampleMap.stats.plateauTiles} elevated tiles</span>
+              <span>max tier {sampleMap.stats.maxTerrainLevel}</span>
               <span>{sampleMap.stats.ruleConflicts} rule conflicts</span>
             </div>
             <div className="tile-mapper-sample-controls">
+              <label className="tile-mapper-sample-control">
+                <span>Cols</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={sampleColsInput}
+                  onChange={(event) => {
+                    const sanitized = event.target.value.replace(/[^\d]/g, '');
+                    setSampleColsInput(sanitized);
+                    const nextValue = Number.parseInt(sanitized, 10);
+                    if (!Number.isFinite(nextValue) || nextValue < 1) {
+                      return;
+                    }
+                    setSampleSettings((current) => ({
+                      ...current,
+                      cols: nextValue,
+                    }));
+                  }}
+                  onBlur={() => {
+                    if (sampleColsInput.trim().length === 0) {
+                      setSampleColsInput(String(sampleSettings.cols));
+                    }
+                  }}
+                />
+              </label>
+              <label className="tile-mapper-sample-control">
+                <span>Rows</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={sampleRowsInput}
+                  onChange={(event) => {
+                    const sanitized = event.target.value.replace(/[^\d]/g, '');
+                    setSampleRowsInput(sanitized);
+                    const nextValue = Number.parseInt(sanitized, 10);
+                    if (!Number.isFinite(nextValue) || nextValue < 1) {
+                      return;
+                    }
+                    setSampleSettings((current) => ({
+                      ...current,
+                      rows: nextValue,
+                    }));
+                  }}
+                  onBlur={() => {
+                    if (sampleRowsInput.trim().length === 0) {
+                      setSampleRowsInput(String(sampleSettings.rows));
+                    }
+                  }}
+                />
+              </label>
+              <label className="tile-mapper-sample-control tile-mapper-sample-control-wide">
+                <span>Randomness {sampleSettings.randomness}%</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={sampleSettings.randomness}
+                  onChange={(event) =>
+                    setSampleSettings((current) => ({
+                      ...current,
+                      randomness: Number(event.target.value) || 0,
+                    }))
+                  }
+                />
+              </label>
               <label className="tile-mapper-sample-control">
                 <span>Layer View</span>
                 <select
@@ -1662,6 +1882,44 @@ export function TileMappingTool() {
                   <option value="flat">Flat Only</option>
                   <option value="elevated">Elevated Only</option>
                 </select>
+              </label>
+              <label className="tile-mapper-sample-control">
+                <span>Zoom</span>
+                <select
+                  value={String(sampleZoom)}
+                  onChange={(event) => setSampleZoom(Number(event.target.value) || 1)}
+                  disabled={samplePawnEnabled}
+                >
+                  <option value="0.5">50%</option>
+                  <option value="0.75">75%</option>
+                  <option value="1">100%</option>
+                  <option value="1.2">120%</option>
+                  <option value="1.25">125%</option>
+                  <option value="1.5">150%</option>
+                  <option value="2">200%</option>
+                </select>
+              </label>
+              <label className="tile-mapper-sample-toggle">
+                <input
+                  type="checkbox"
+                  checked={samplePawnEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    if (!enabled) {
+                      sampleMovementRef.current = {
+                        north: false,
+                        east: false,
+                        south: false,
+                        west: false,
+                      };
+                      setSamplePawnEnabled(false);
+                      setSamplePawn(null);
+                      return;
+                    }
+                    spawnSamplePawn();
+                  }}
+                />
+                <span>Spawn Pawn</span>
               </label>
               <label className="tile-mapper-sample-toggle">
                 <input
@@ -1681,38 +1939,72 @@ export function TileMappingTool() {
             </div>
             <div className="tile-mapper-sample-stage">
               <div
-                className="tile-mapper-sample-map"
-                style={{
-                  width: sampleMap.cols * SAMPLE_TILE_SIZE,
-                  height: sampleMap.rows * SAMPLE_TILE_SIZE,
-                }}
+                ref={sampleViewportRef}
+                className="tile-mapper-sample-viewport"
+                tabIndex={0}
+                aria-label="Sample map viewport"
               >
-                <div className="tile-mapper-sample-water" />
-                {sampleLayerView === 'total'
-                  ? sampleMap.decorations
-                      .filter((decoration) => decoration.layer === 'water')
-                      .map((decoration, index) => renderSampleDecoration(decoration, index))
-                  : null}
-                {sampleLayerView !== 'elevated'
-                  ? sampleMap.foamStamps.map((stamp) => renderSampleOverlay(stamp))
-                  : null}
-                {sampleLayerView !== 'elevated'
-                  ? sampleMap.flatTiles.map((tile) => renderSampleTile(tile))
-                  : null}
-                {sampleLayerView !== 'flat'
-                  ? sampleMap.shadowStamps.map((stamp) => renderSampleOverlay(stamp))
-                  : null}
-                {sampleLayerView !== 'flat'
-                  ? sampleMap.elevatedTiles.map((tile) => renderSampleTile(tile))
-                  : null}
-                {sampleLayerView === 'total'
-                  ? sampleMap.decorations
-                      .filter((decoration) => decoration.layer === 'land')
-                      .map((decoration, index) => renderSampleDecoration(decoration, index))
-                  : null}
-                {showSampleConflicts
-                  ? visibleSampleConflicts.map((cell) => renderSampleConflict(cell))
-                  : null}
+                <div
+                  className="tile-mapper-sample-scaled"
+                  style={{
+                    width: sampleMap.cols * SAMPLE_TILE_SIZE * sampleZoom,
+                    height: sampleMap.rows * SAMPLE_TILE_SIZE * sampleZoom,
+                  }}
+                >
+                  <div
+                    className="tile-mapper-sample-map"
+                    style={{
+                      width: sampleMap.cols * SAMPLE_TILE_SIZE,
+                      height: sampleMap.rows * SAMPLE_TILE_SIZE,
+                      transform: `scale(${sampleZoom})`,
+                      transformOrigin: 'top left',
+                    }}
+                  >
+                    <div className="tile-mapper-sample-water" />
+                    {sampleLayerView === 'total'
+                      ? sampleMap.decorations
+                          .filter((decoration) => decoration.layer === 'water')
+                          .map((decoration, index) => renderSampleDecoration(decoration, index))
+                      : null}
+                    {sampleLayerView !== 'elevated'
+                      ? sampleMap.foamStamps.map((stamp) => renderSampleOverlay(stamp))
+                      : null}
+                    {sampleLayerView !== 'elevated'
+                      ? sampleMap.flatTiles.map((tile) => renderSampleTile(tile))
+                      : null}
+                    {sampleLayerView !== 'flat'
+                      ? sampleElevatedLevels.map((terrainLevel) => (
+                          <div key={`sample-elevated-level-${terrainLevel}`}>
+                            {sampleMap.shadowStamps
+                              .filter((stamp) => stamp.terrainLevel === terrainLevel)
+                              .map((stamp) => renderSampleOverlay(stamp))}
+                            {sampleMap.elevatedTiles
+                              .filter((tile) => tile.terrainLevel === terrainLevel)
+                              .map((tile) => renderSampleTile(tile))}
+                          </div>
+                        ))
+                      : null}
+                    {sampleLayerView === 'total'
+                      ? sampleMap.decorations
+                          .filter((decoration) => decoration.layer === 'land')
+                          .map((decoration, index) => renderSampleDecoration(decoration, index))
+                      : null}
+                    {samplePawnEnabled && samplePawn ? (
+                      <div
+                        ref={samplePawnNodeRef}
+                        className={`tile-mapper-sample-pawn${samplePawn.moving ? ' is-moving' : ''}${samplePawn.facing === 'left' ? ' is-facing-left' : ''}`}
+                        style={{
+                          left: samplePawn.x - (SAMPLE_TILE_SIZE * 1.55) / 2,
+                          top: samplePawn.y - (SAMPLE_TILE_SIZE * 1.55) / 2,
+                          zIndex: Math.round((samplePawn.y + SAMPLE_PAWN_FOOT_OFFSET_Y) * 10),
+                        }}
+                      />
+                    ) : null}
+                    {showSampleConflicts
+                      ? visibleSampleConflicts.map((cell) => renderSampleConflict(cell))
+                      : null}
+                  </div>
+                </div>
               </div>
             </div>
             {sampleMap.failureDiagnostics ? (
@@ -1850,7 +2142,7 @@ function getTilePreviewStyle(src: string, tileId: number, targetSize: number) {
 function renderSampleTile(tile: WfcSampleTile) {
   return (
     <div
-      key={`sample-tile-${tile.row}-${tile.col}-${tile.tileId}`}
+      key={`sample-tile-${tile.terrainLevel}-${tile.row}-${tile.col}-${tile.tileId}`}
       className="tile-mapper-sample-tile"
       style={{
         ...getTilePreviewStyle(ATLAS_OPTIONS[tile.atlasKey].src, tile.tileId, SAMPLE_TILE_SIZE),
@@ -1871,7 +2163,7 @@ function renderSampleOverlay(stamp: WfcSampleOverlay) {
   if (stamp.kind === 'foam') {
     return (
       <div
-        key={`sample-foam-${stamp.row}-${stamp.col}`}
+        key={`sample-foam-${stamp.terrainLevel}-${stamp.row}-${stamp.col}`}
         className="tile-mapper-sample-overlay is-foam"
         style={{
           left,
@@ -1885,7 +2177,7 @@ function renderSampleOverlay(stamp: WfcSampleOverlay) {
 
   return (
     <div
-      key={`sample-shadow-${stamp.row}-${stamp.col}`}
+      key={`sample-shadow-${stamp.terrainLevel}-${stamp.row}-${stamp.col}`}
       className="tile-mapper-sample-overlay is-shadow"
       style={{
         left,
@@ -1917,6 +2209,12 @@ function renderSampleDecoration(decoration: WfcSampleDecoration, index: number) 
         top: baseY - height,
         width,
         height,
+        zIndex:
+          decoration.layer === 'water'
+            ? 4
+            : decoration.kind === 'tree'
+              ? Math.round(baseY * 10)
+              : 6,
         backgroundImage: `url("${decoration.src}")`,
         backgroundSize: frameCount > 1 ? `${frameCount * 100}% 100%` : '100% 100%',
         backgroundPosition: framePosition,
@@ -1945,23 +2243,316 @@ function renderSampleConflict(cell: WfcSampleConflict) {
   );
 }
 
+function buildSampleWalkCells(
+  sampleMap: WfcSampleMap | null,
+  workspace: MappingWorkspace,
+): Map<string, SampleWalkCell> {
+  const cells = new Map<string, SampleWalkCell>();
+  if (!sampleMap) {
+    return cells;
+  }
+
+  const sharedMapping = getTerrainAtlasMapping(workspace, SHARED_EDIT_ATLAS_KEY);
+  const lowerStairTileIds = new Set<number>([
+    sharedMapping.stairs.left.lower,
+    sharedMapping.stairs.right.lower,
+  ]);
+  const topTileByCell = new Map<
+    string,
+    { tile: WfcSampleTile; effectiveLevel: number; passable: Record<GrammarDirection, boolean> }
+  >();
+  const allTiles = [...sampleMap.flatTiles, ...sampleMap.elevatedTiles];
+  for (const tile of allTiles) {
+    const rules = getAuthoredTileRules(workspace, tile.atlasKey, tile.tileId);
+    const effectiveLevel = lowerStairTileIds.has(tile.tileId)
+      ? Math.max(1, tile.terrainLevel - 1)
+      : tile.terrainLevel;
+    const key = `${tile.row},${tile.col}`;
+    const current = topTileByCell.get(key);
+    if (!current || effectiveLevel >= current.effectiveLevel) {
+      topTileByCell.set(key, {
+        tile,
+        effectiveLevel,
+        passable: { ...rules.passable },
+      });
+    }
+  }
+
+  for (const [key, entry] of topTileByCell.entries()) {
+    if (!GRAMMAR_DIRECTIONS.some((direction) => entry.passable[direction])) {
+      continue;
+    }
+
+    cells.set(key, {
+      row: entry.tile.row,
+      col: entry.tile.col,
+      terrainLevel: entry.effectiveLevel,
+      passable: entry.passable,
+    });
+  }
+
+  return cells;
+}
+
+function pickSamplePawnSpawn(
+  sampleMap: WfcSampleMap,
+  walkCells: Map<string, SampleWalkCell>,
+): SampleWalkCell | null {
+  let best: SampleWalkCell | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  const centerRow = sampleMap.rows / 2;
+  const centerCol = sampleMap.cols / 2;
+
+  for (const cell of walkCells.values()) {
+    const distance = Math.abs(cell.row + 0.5 - centerRow) + Math.abs(cell.col + 0.5 - centerCol);
+    const score = distance - cell.terrainLevel * 0.2;
+    if (score < bestScore) {
+      best = cell;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function advanceSamplePawnState(
+  pawn: SamplePawnState,
+  movement: Record<GrammarDirection, boolean>,
+  walkCells: Map<string, SampleWalkCell>,
+  dt: number,
+): SamplePawnState {
+  let dx = 0;
+  let dy = 0;
+  if (movement.west) dx -= 1;
+  if (movement.east) dx += 1;
+  if (movement.north) dy -= 1;
+  if (movement.south) dy += 1;
+
+  if (dx === 0 && dy === 0) {
+    return pawn.moving ? { ...pawn, moving: false } : pawn;
+  }
+
+  if (dx !== 0 && dy !== 0) {
+    const inv = 1 / Math.SQRT2;
+    dx *= inv;
+    dy *= inv;
+  }
+
+  const facing = dx < 0 ? 'left' : dx > 0 ? 'right' : pawn.facing;
+  const nextX = pawn.x + dx * SAMPLE_PAWN_SPEED * dt;
+  const nextY = pawn.y + dy * SAMPLE_PAWN_SPEED * dt;
+
+  if (canMoveSamplePawn(pawn.x, pawn.y, nextX, nextY, walkCells)) {
+    return { x: nextX, y: nextY, facing, moving: true };
+  }
+  if (canMoveSamplePawn(pawn.x, pawn.y, nextX, pawn.y, walkCells)) {
+    return { x: nextX, y: pawn.y, facing, moving: true };
+  }
+  if (canMoveSamplePawn(pawn.x, pawn.y, pawn.x, nextY, walkCells)) {
+    return { x: pawn.x, y: nextY, facing, moving: true };
+  }
+
+  if (pawn.facing === facing && !pawn.moving) {
+    return pawn;
+  }
+  return { ...pawn, facing, moving: false };
+}
+
+function oppositeDirection(direction: GrammarDirection): GrammarDirection {
+  if (direction === 'north') return 'south';
+  if (direction === 'south') return 'north';
+  if (direction === 'west') return 'east';
+  return 'west';
+}
+
+function canMoveSamplePawn(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  walkCells: Map<string, SampleWalkCell>,
+): boolean {
+  const fromTile = getSampleMovementTile(fromX, fromY);
+  const toTile = getSampleMovementTile(toX, toY);
+  if (!fromTile || !toTile) {
+    return false;
+  }
+
+  const fromCell = walkCells.get(`${fromTile.row},${fromTile.col}`);
+  const toCell = walkCells.get(`${toTile.row},${toTile.col}`);
+  if (!fromCell || !toCell) {
+    return false;
+  }
+
+  if (fromTile.row === toTile.row && fromTile.col === toTile.col) {
+    return canOccupySamplePawn(toX, toY, walkCells);
+  }
+
+  if (fromCell.terrainLevel === toCell.terrainLevel) {
+    return canSweepSamplePawn(
+      fromX,
+      fromY,
+      toX,
+      toY,
+      walkCells,
+      SAMPLE_PAWN_COLLISION_RADIUS * 0.68,
+    );
+  }
+
+  const rowDelta = toTile.row - fromTile.row;
+  const colDelta = toTile.col - fromTile.col;
+  if (Math.abs(rowDelta) > 1 || Math.abs(colDelta) > 1 || (rowDelta === 0 && colDelta === 0)) {
+    return false;
+  }
+
+  if (Math.abs(rowDelta) === 1 && Math.abs(colDelta) === 1) {
+    const horizontalCell = walkCells.get(`${fromTile.row},${toTile.col}`);
+    const verticalCell = walkCells.get(`${toTile.row},${fromTile.col}`);
+
+    const canHorizontalThenVertical =
+      horizontalCell &&
+      isSampleCardinalTransitionAllowed(fromCell, horizontalCell, 0, colDelta) &&
+      isSampleCardinalTransitionAllowed(horizontalCell, toCell, rowDelta, 0);
+
+    const canVerticalThenHorizontal =
+      verticalCell &&
+      isSampleCardinalTransitionAllowed(fromCell, verticalCell, rowDelta, 0) &&
+      isSampleCardinalTransitionAllowed(verticalCell, toCell, 0, colDelta);
+
+    if (canHorizontalThenVertical || canVerticalThenHorizontal) {
+      return true;
+    }
+
+    const diagonalRadius = SAMPLE_PAWN_COLLISION_RADIUS * 0.72;
+    const sameLevel = fromCell.terrainLevel === toCell.terrainLevel;
+    const horizontalBlocked = !horizontalCell || horizontalCell.terrainLevel !== fromCell.terrainLevel;
+    const verticalBlocked = !verticalCell || verticalCell.terrainLevel !== fromCell.terrainLevel;
+
+    return (
+      sameLevel &&
+      horizontalBlocked &&
+      verticalBlocked &&
+      canOccupySamplePawn(toX, toY, walkCells, diagonalRadius, true, true)
+    );
+  }
+
+  return (
+    isSampleCardinalTransitionAllowed(fromCell, toCell, rowDelta, colDelta) &&
+    canOccupySamplePawn(toX, toY, walkCells)
+  );
+}
+
+function canSweepSamplePawn(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  walkCells: Map<string, SampleWalkCell>,
+  collisionRadius: number,
+): boolean {
+  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const steps = Math.max(2, Math.ceil(distance / 4));
+
+  for (let index = 1; index <= steps; index++) {
+    const t = index / steps;
+    const x = fromX + (toX - fromX) * t;
+    const y = fromY + (toY - fromY) * t;
+    if (!canOccupySamplePawn(x, y, walkCells, collisionRadius, true)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSampleCardinalTransitionAllowed(
+  fromCell: SampleWalkCell,
+  toCell: SampleWalkCell,
+  rowDelta: number,
+  colDelta: number,
+): boolean {
+  if (rowDelta === -1) return fromCell.passable.north && toCell.passable.south;
+  if (rowDelta === 1) return fromCell.passable.south && toCell.passable.north;
+  if (colDelta === -1) return fromCell.passable.west && toCell.passable.east;
+  if (colDelta === 1) return fromCell.passable.east && toCell.passable.west;
+  return false;
+}
+
+function canOccupySamplePawn(
+  x: number,
+  y: number,
+  walkCells: Map<string, SampleWalkCell>,
+  collisionRadius = SAMPLE_PAWN_COLLISION_RADIUS,
+  ignoreEdgePassability = false,
+  ignoreNeighborRing = false,
+): boolean {
+  const tile = getSampleMovementTile(x, y);
+  if (!tile) {
+    return false;
+  }
+  const cell = walkCells.get(`${tile.row},${tile.col}`);
+  if (!cell) {
+    return false;
+  }
+
+  const footY = y + SAMPLE_PAWN_FOOT_OFFSET_Y;
+  const localX = x - tile.col * SAMPLE_TILE_SIZE;
+  const localY = footY - tile.row * SAMPLE_TILE_SIZE;
+  if (!ignoreEdgePassability) {
+    if (!cell.passable.north && localY < collisionRadius) {
+      return false;
+    }
+    if (!cell.passable.south && localY > SAMPLE_TILE_SIZE - collisionRadius) {
+      return false;
+    }
+    if (!cell.passable.west && localX < collisionRadius) {
+      return false;
+    }
+    if (!cell.passable.east && localX > SAMPLE_TILE_SIZE - collisionRadius) {
+      return false;
+    }
+  }
+
+  if (ignoreNeighborRing) {
+    return true;
+  }
+
+  const offsets = [
+    { x: 0, y: -collisionRadius },
+    { x: collisionRadius, y: 0 },
+    { x: collisionRadius * 0.7, y: collisionRadius * 0.7 },
+    { x: 0, y: collisionRadius },
+    { x: -collisionRadius * 0.7, y: collisionRadius * 0.7 },
+    { x: -collisionRadius, y: 0 },
+    { x: -collisionRadius * 0.7, y: -collisionRadius * 0.7 },
+    { x: collisionRadius * 0.7, y: -collisionRadius * 0.7 },
+  ];
+
+  return offsets.every((offset) => {
+    const sampleTile = getSampleMovementTile(x + offset.x, y + offset.y);
+    return sampleTile ? walkCells.has(`${sampleTile.row},${sampleTile.col}`) : false;
+  });
+}
+
+function getSampleMovementTile(x: number, y: number): { row: number; col: number } | null {
+  const col = Math.floor(x / SAMPLE_TILE_SIZE);
+  const row = Math.floor((y + SAMPLE_PAWN_FOOT_OFFSET_Y) / SAMPLE_TILE_SIZE);
+  if (row < 0 || col < 0) {
+    return null;
+  }
+  return { row, col };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function formatSocketList(sockets: GrammarSocket[]): string {
   return sockets.length > 0 ? sockets.join(', ') : 'none';
 }
 
 function formatTileIdList(tileIds: number[]): string {
   return tileIds.length > 0 ? tileIds.join(', ') : 'none';
-}
-
-function summarizeRuleDirections(rules: AuthoredTileRules): string {
-  return [
-    `N:${formatTileIdList(rules.adjacency.north)}`,
-    `E:${formatTileIdList(rules.adjacency.east)}`,
-    `S:${formatTileIdList(rules.adjacency.south)}`,
-    `W:${formatTileIdList(rules.adjacency.west)}`,
-    `L:${rules.layer.level}`,
-    `Below:${rules.layer.requiresBelow}`,
-  ].join(' | ');
 }
 
 function formatPassability(
@@ -1995,13 +2586,6 @@ function getTravelState(
     return 'inbound-only';
   }
   return 'sealed';
-}
-
-function oppositeDirection(direction: GrammarDirection): GrammarDirection {
-  if (direction === 'north') return 'south';
-  if (direction === 'east') return 'west';
-  if (direction === 'south') return 'north';
-  return 'east';
 }
 
 function travelStateLabel(state: TravelState): string {

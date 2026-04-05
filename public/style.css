@@ -382,9 +382,7 @@ body {
 
 .tile-mapper-utility-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
-    align-items: end;
 }
 
 .tile-mapper-utility-guide {
@@ -523,17 +521,33 @@ body {
 .tile-mapper-sample-control {
     display: grid;
     gap: 6px;
-    min-width: 180px;
+    min-width: 140px;
     color: #dceccf;
     font-size: 12px;
 }
 
+.tile-mapper-sample-control input,
 .tile-mapper-sample-control select {
     min-height: 38px;
     padding: 8px 10px;
     border: 1px solid rgba(171, 214, 157, 0.18);
     background: rgba(22, 38, 28, 0.9);
     color: #eff7dc;
+    box-sizing: border-box;
+    width: 100%;
+    font-family: inherit;
+}
+
+.tile-mapper-sample-control input[type='range'] {
+    min-height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+.tile-mapper-sample-control-wide {
+    min-width: min(320px, 100%);
+    flex: 1 1 260px;
 }
 
 .tile-mapper-sample-toggle {
@@ -587,16 +601,26 @@ body {
 
 .tile-mapper-sample-stage {
     margin-top: 18px;
-    overflow: auto;
     border: 1px solid rgba(171, 214, 157, 0.16);
     background:
         linear-gradient(180deg, rgba(80, 171, 173, 0.22), rgba(56, 136, 140, 0.24)),
         #4caeb1;
 }
 
-.tile-mapper-sample-map {
+.tile-mapper-sample-viewport {
+    overflow: auto;
+    max-height: min(70vh, 900px);
+    outline: none;
+}
+
+.tile-mapper-sample-scaled {
     position: relative;
     margin: 0 auto;
+}
+
+.tile-mapper-sample-map {
+    position: relative;
+    margin: 0;
 }
 
 .tile-mapper-sample-water {
@@ -664,6 +688,31 @@ body {
 .tile-mapper-sample-decoration.is-water-rock.is-animated {
     animation: tile-mapper-water-rock-frames 2.66s steps(15, end) infinite;
     will-change: background-position;
+}
+
+.tile-mapper-sample-pawn {
+    position: absolute;
+    width: 62px;
+    height: 62px;
+    pointer-events: none;
+    background-image: url('/assets/Units/Black Units/Pawn/Pawn_Idle.png');
+    background-repeat: no-repeat;
+    background-size: 800% 100%;
+    background-position: 0 0;
+    image-rendering: pixelated;
+    transform-origin: center bottom;
+    animation: tile-mapper-pawn-idle 900ms steps(7, end) infinite;
+    z-index: 18;
+}
+
+.tile-mapper-sample-pawn.is-moving {
+    background-image: url('/assets/Units/Black Units/Pawn/Pawn_Run.png');
+    background-size: 600% 100%;
+    animation: tile-mapper-pawn-run 550ms steps(5, end) infinite;
+}
+
+.tile-mapper-sample-pawn.is-facing-left {
+    transform: scaleX(-1);
 }
 
 .tile-mapper-sample-conflict {
@@ -762,6 +811,24 @@ body {
 }
 
 @keyframes tile-mapper-water-rock-frames {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+@keyframes tile-mapper-pawn-idle {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 100% 0;
+    }
+}
+
+@keyframes tile-mapper-pawn-run {
     from {
         background-position: 0 0;
     }

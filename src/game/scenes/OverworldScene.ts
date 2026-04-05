@@ -32,6 +32,7 @@ export class OverworldScene extends Scene {
   private heroSprite!: Phaser.GameObjects.Sprite;
   private heroNameText!: Phaser.GameObjects.Text;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private moveKeys!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
   private promptText!: Phaser.GameObjects.Text;
   private nearNode: OverworldNode | null = null;
   private nodeSprites: Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite> =
@@ -78,6 +79,12 @@ export class OverworldScene extends Scene {
     this.cameras.main.setDeadzone(100, 75);
 
     this.cursors = this.input.keyboard!.createCursorKeys();
+    this.moveKeys = this.input.keyboard!.addKeys({
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D,
+    }) as Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.bindPortalEvents();
 
@@ -589,10 +596,10 @@ export class OverworldScene extends Scene {
     let dy = 0;
 
     if (!this.portalPickerOpen) {
-      if (this.cursors.left.isDown) dx -= 1;
-      if (this.cursors.right.isDown) dx += 1;
-      if (this.cursors.up.isDown) dy -= 1;
-      if (this.cursors.down.isDown) dy += 1;
+      if (this.cursors.left.isDown || this.moveKeys.left.isDown) dx -= 1;
+      if (this.cursors.right.isDown || this.moveKeys.right.isDown) dx += 1;
+      if (this.cursors.up.isDown || this.moveKeys.up.isDown) dy -= 1;
+      if (this.cursors.down.isDown || this.moveKeys.down.isDown) dy += 1;
     }
 
     if (dx !== 0 && dy !== 0) {

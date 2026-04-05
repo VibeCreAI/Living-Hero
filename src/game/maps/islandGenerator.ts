@@ -98,6 +98,7 @@ interface StairSpec {
   topRow: number;
   variant: 'left' | 'right';
   style: 'open' | 'cliff';
+  terrainLevel?: number;
 }
 
 interface PlateauBuildResult {
@@ -199,10 +200,12 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
   const cols = options.cols;
 
   const flatLayerKey = sample.flatTiles[0]?.atlasKey ?? options.flatAtlasKey ?? 'terrain-tileset';
-  const elevatedLayerKey =
-    sample.elevatedTiles[0]?.atlasKey ?? options.elevatedAtlasKey ?? 'terrain-tileset-alt';
   const flatLayer = buildTileLayerFromSampleTiles(sample.flatTiles, rows, cols);
-  const elevatedLayer = buildTileLayerFromSampleTiles(sample.elevatedTiles, rows, cols);
+  const elevatedLevels = Array.from(
+    new Set(sample.elevatedTiles.map((tile) => tile.terrainLevel)),
+  ).sort((left, right) => left - right);
+  const primaryElevatedTiles = sample.elevatedTiles.filter((tile) => tile.terrainLevel === 2);
+  const elevatedLevelTwoLayer = buildTileLayerFromSampleTiles(primaryElevatedTiles, rows, cols);
 
   const landMask = createBoolGrid(rows, cols, false);
   for (const tile of sample.flatTiles) {
@@ -250,7 +253,7 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
   const cliffMask = createBoolGrid(rows, cols, false);
   const stairs: StairSpec[] = [];
 
-  for (const tile of sample.elevatedTiles) {
+  for (const tile of primaryElevatedTiles) {
     if (elevatedTopIds.has(tile.tileId)) {
       plateauMask[tile.row][tile.col] = true;
     } else if (cliffIds.has(tile.tileId)) {
@@ -258,7 +261,7 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
     }
   }
 
-  for (const tile of sample.elevatedTiles) {
+  for (const tile of primaryElevatedTiles) {
     const variant = upperStairIds.get(tile.tileId);
     if (!variant) {
       continue;
@@ -267,7 +270,7 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
     if (!inBounds(lowerRow, tile.col, rows, cols)) {
       continue;
     }
-    const lowerTileId = elevatedLayer[lowerRow][tile.col];
+    const lowerTileId = elevatedLevelTwoLayer[lowerRow][tile.col];
     if (lowerStairIds.get(lowerTileId) !== variant) {
       continue;
     }
@@ -276,6 +279,7 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
       topRow: tile.row,
       variant,
       style: 'open',
+      terrainLevel: 2,
     });
   }
 
@@ -285,24 +289,28 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
     for (let col = 0; col < cols; col++) {
       if (landMask[row][col]) {
         heightMap[row][col] = 1;
-        walkMask[row][col] = !cliffMask[row][col];
-      }
-      if (plateauMask[row][col]) {
-        heightMap[row][col] = 2;
         walkMask[row][col] = true;
       }
     }
   }
-  for (const stair of stairs) {
-    if (inBounds(stair.topRow, stair.col, rows, cols)) {
-      walkMask[stair.topRow][stair.col] = true;
-      heightMap[stair.topRow][stair.col] = 2;
+
+  for (const tile of [...sample.elevatedTiles].sort(
+    (left, right) => left.terrainLevel - right.terrainLevel,
+  )) {
+    if (!inBounds(tile.row, tile.col, rows, cols)) {
+      continue;
     }
-    if (inBounds(stair.topRow + 1, stair.col, rows, cols)) {
-      walkMask[stair.topRow + 1][stair.col] = true;
-      if (heightMap[stair.topRow + 1][stair.col] === 0) {
-        heightMap[stair.topRow + 1][stair.col] = 1;
-      }
+
+    if (elevatedTopIds.has(tile.tileId) || upperStairIds.has(tile.tileId)) {
+      heightMap[tile.row][tile.col] = Math.max(heightMap[tile.row][tile.col], tile.terrainLevel);
+      walkMask[tile.row][tile.col] = true;
+    } else if (lowerStairIds.has(tile.tileId)) {
+      const supportLevel = Math.max(1, tile.terrainLevel - 1);
+      heightMap[tile.row][tile.col] = Math.max(heightMap[tile.row][tile.col], supportLevel);
+      walkMask[tile.row][tile.col] = true;
+    } else if (cliffIds.has(tile.tileId)) {
+      heightMap[tile.row][tile.col] = Math.max(heightMap[tile.row][tile.col], Math.max(1, tile.terrainLevel - 1));
+      walkMask[tile.row][tile.col] = false;
     }
   }
 
@@ -352,11 +360,18 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
         depth: OVERWORLD_DEPTHS.flat,
         tileData: flatLayer,
       },
-      {
-        key: elevatedLayerKey,
-        depth: OVERWORLD_DEPTHS.elevated,
-        tileData: elevatedLayer,
-      },
+      ...elevatedLevels.map((terrainLevel) => ({
+        key:
+          sample.elevatedTiles.find((tile) => tile.terrainLevel === terrainLevel)?.atlasKey ??
+          options.elevatedAtlasKey ??
+          'terrain-tileset-alt',
+        depth: OVERWORLD_DEPTHS.elevated + (terrainLevel - 2) * 8,
+        tileData: buildTileLayerFromSampleTiles(
+          sample.elevatedTiles.filter((tile) => tile.terrainLevel === terrainLevel),
+          rows,
+          cols,
+        ),
+      })),
     ],
     foamStamps: sample.foamStamps.map((stamp) => ({
       kind: 'foam',
@@ -371,7 +386,7 @@ function generateIslandMapFromSample(options: OverworldTerrainOptions): Generate
       col: stamp.col,
       row: stamp.row,
       scale: stamp.scale,
-      depth: OVERWORLD_DEPTHS.shadow,
+      depth: OVERWORLD_DEPTHS.shadow + (stamp.terrainLevel - 2) * 8,
       framePolicy: 'static',
     })),
     heightMap,
@@ -444,14 +459,29 @@ function buildPassabilityMapFromSample(
   const passabilityMap = Array.from({ length: rows }, () =>
     Array.from({ length: cols }, () => ({ ...defaultPassable })),
   );
-  const flatByCell = new Map<string, WfcSampleTile>();
-  const elevatedByCell = new Map<string, WfcSampleTile>();
+  const sourceByCell = new Map<string, { tile: WfcSampleTile; effectiveLevel: number }>();
 
   for (const tile of sample.flatTiles) {
-    flatByCell.set(`${tile.row},${tile.col}`, tile);
+    sourceByCell.set(`${tile.row},${tile.col}`, { tile, effectiveLevel: 1 });
   }
+
   for (const tile of sample.elevatedTiles) {
-    elevatedByCell.set(`${tile.row},${tile.col}`, tile);
+    const usesElevatedRules =
+      elevatedTopIds.has(tile.tileId) ||
+      upperStairIds.has(tile.tileId) ||
+      lowerStairIds.has(tile.tileId);
+    if (!usesElevatedRules) {
+      continue;
+    }
+
+    const effectiveLevel = lowerStairIds.has(tile.tileId)
+      ? Math.max(1, tile.terrainLevel - 1)
+      : tile.terrainLevel;
+    const cellKey = `${tile.row},${tile.col}`;
+    const current = sourceByCell.get(cellKey);
+    if (!current || effectiveLevel >= current.effectiveLevel) {
+      sourceByCell.set(cellKey, { tile, effectiveLevel });
+    }
   }
 
   for (let row = 0; row < rows; row++) {
@@ -460,22 +490,15 @@ function buildPassabilityMapFromSample(
         continue;
       }
 
-      const cellKey = `${row},${col}`;
-      const elevatedTile = elevatedByCell.get(cellKey);
-      const flatTile = flatByCell.get(cellKey);
-      const usesElevatedRules =
-        elevatedTile &&
-        (elevatedTopIds.has(elevatedTile.tileId) ||
-          upperStairIds.has(elevatedTile.tileId) ||
-          lowerStairIds.has(elevatedTile.tileId));
-      const sourceTile = usesElevatedRules ? elevatedTile : flatTile;
-
-      if (!sourceTile) {
+      const source = sourceByCell.get(`${row},${col}`)?.tile;
+      if (!source) {
         passabilityMap[row][col] = { north: true, east: true, south: true, west: true };
         continue;
       }
 
-      passabilityMap[row][col] = { ...getAuthoredTileRules(workspace, sourceTile.atlasKey, sourceTile.tileId).passable };
+      passabilityMap[row][col] = {
+        ...getAuthoredTileRules(workspace, source.atlasKey, source.tileId).passable,
+      };
     }
   }
 

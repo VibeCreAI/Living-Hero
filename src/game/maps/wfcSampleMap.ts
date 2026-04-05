@@ -21,6 +21,7 @@ export interface WfcSampleTile {
   col: number;
   tileId: number;
   atlasKey: AtlasKey;
+  terrainLevel: number;
 }
 
 export interface WfcSampleOverlay {
@@ -28,6 +29,7 @@ export interface WfcSampleOverlay {
   row: number;
   col: number;
   scale: number;
+  terrainLevel: number;
 }
 
 export interface WfcSampleConflict {
@@ -71,6 +73,7 @@ export interface WfcSampleMap {
     landTiles: number;
     plateauTiles: number;
     ruleConflicts: number;
+    maxTerrainLevel: number;
   };
   failureReason?: string;
   failureDiagnostics?: ConstraintFailureDiagnostics | null;
@@ -145,6 +148,21 @@ interface SampleDecorationAsset {
   animationDurationMs?: number;
 }
 
+interface GeneratedPlateauLayer {
+  terrainLevel: number;
+  atlasKey: AtlasKey;
+  supportMask: boolean[][];
+  plateauMask: boolean[][];
+  stairs: StairPreviewList;
+  cliffBands: {
+    land: boolean[][];
+    water: boolean[][];
+    mask: boolean[][];
+  };
+  topGrid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>;
+  renderedGrid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>;
+}
+
 const SAMPLE_TREE_ASSETS: SampleDecorationAsset[] = [
   {
     kind: 'tree',
@@ -153,8 +171,8 @@ const SAMPLE_TREE_ASSETS: SampleDecorationAsset[] = [
     animationKey: 'tree-1-anim',
     frameCount: 8,
     animated: true,
-    width: 1.28,
-    height: 1.7,
+    width: 1.85,
+    height: 2.45,
     animationDurationMs: 1333,
   },
   {
@@ -164,8 +182,8 @@ const SAMPLE_TREE_ASSETS: SampleDecorationAsset[] = [
     animationKey: 'tree-2-anim',
     frameCount: 8,
     animated: true,
-    width: 1.28,
-    height: 1.7,
+    width: 1.85,
+    height: 2.45,
     animationDurationMs: 1333,
   },
   {
@@ -175,8 +193,8 @@ const SAMPLE_TREE_ASSETS: SampleDecorationAsset[] = [
     animationKey: 'tree-3-anim',
     frameCount: 8,
     animated: true,
-    width: 1.16,
-    height: 1.16,
+    width: 1.55,
+    height: 1.55,
     animationDurationMs: 1333,
   },
   {
@@ -186,8 +204,8 @@ const SAMPLE_TREE_ASSETS: SampleDecorationAsset[] = [
     animationKey: 'tree-4-anim',
     frameCount: 8,
     animated: true,
-    width: 1.16,
-    height: 1.16,
+    width: 1.55,
+    height: 1.55,
     animationDurationMs: 1333,
   },
 ];
@@ -287,12 +305,14 @@ export function generateWfcSampleMap(
   options: WfcSampleOptions = {},
 ): WfcSampleMap {
   const seed = options.seed ?? Date.now();
-  const cols = Math.max(10, Math.min(40, Math.floor(options.cols ?? 18)));
-  const rows = Math.max(8, Math.min(28, Math.floor(options.rows ?? 12)));
+  const cols = Math.max(10, Math.floor(options.cols ?? 18));
+  const rows = Math.max(8, Math.floor(options.rows ?? 12));
   const randomness = clamp01(options.randomness ?? 0.35);
   const rng = mulberry32(seed);
   const flatAtlasKey = pickRandomAtlasKey(rng);
-  const elevatedAtlasKey = pickRandomAtlasKey(rng, flatAtlasKey);
+  const usedAtlasKeys = new Set<AtlasKey>([flatAtlasKey]);
+  const elevatedAtlasKey = pickRandomAtlasKeyAvoiding(rng, usedAtlasKeys);
+  usedAtlasKeys.add(elevatedAtlasKey);
   const grammar = buildTerrainGrammar(workspace);
   const mapping = getTerrainAtlasMapping(workspace);
   const flatCandidates = grammar.tiles.filter(
@@ -354,15 +374,13 @@ export function generateWfcSampleMap(
   let chosenFlatMask = flatMask;
   let chosenFlatGrid = baseFlatGrid;
   let chosenFlatFailureReason = baseFlatFailureReason;
-  let chosenPlateauMask: boolean[][] | null = null;
-  let chosenStairs: StairPreviewList = [];
-  let chosenElevatedGrid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>> | null = null;
-  let chosenCliffMask = createBoolGrid(rows, cols, false);
+  let chosenLevel2: GeneratedPlateauLayer | null = null;
 
   for (let attemptIndex = 0; attemptIndex < plateauAttempts.length; attemptIndex++) {
     const plateauResult = ensurePlateauEntry(
       flatMask,
       plateauAttempts[attemptIndex],
+      elevatedTopCandidates,
       mulberry32(seed + 1337 + attemptIndex * 37),
       randomness,
     );
@@ -389,7 +407,7 @@ export function generateWfcSampleMap(
           rows,
         );
 
-    const cliffBands = buildSampleCliffBands(attemptFlatMask, plateauMask, stairs);
+    const cliffBands = buildSampleCliffBands(attemptFlatMask, plateauMask, stairs, 2);
     const deterministicElevatedTopGrid = buildElevatedTopPreferenceGrid(
       plateauMask,
       mapping,
@@ -417,21 +435,28 @@ export function generateWfcSampleMap(
     chosenFlatMask = attemptFlatMask;
     chosenFlatGrid = attemptFlatGrid;
     chosenFlatFailureReason = attemptFlatFailureReason;
-    chosenPlateauMask = plateauMask;
-    chosenStairs = stairs;
-    chosenCliffMask = cliffBands.mask;
-    chosenElevatedGrid = buildElevatedGrid(
-      elevatedTopRuleGrid,
+    const topGrid = retintPlacedGrid(projectPlacedRuleGrid(elevatedTopRuleGrid), elevatedAtlasKey);
+    chosenLevel2 = {
+      terrainLevel: 2,
+      atlasKey: elevatedAtlasKey,
+      supportMask: chosenFlatMask,
       plateauMask,
-      cliffBands,
       stairs,
-      mapping,
-      elevatedAtlasKey,
-    );
+      cliffBands,
+      topGrid,
+      renderedGrid: buildElevatedGrid(
+        elevatedTopRuleGrid,
+        plateauMask,
+        cliffBands,
+        stairs,
+        mapping,
+        elevatedAtlasKey,
+      ),
+    };
     break;
   }
 
-  if (!chosenElevatedGrid || !chosenPlateauMask) {
+  if (!chosenLevel2) {
     return buildFlatOnlyPlacedSampleMap(
       workspace,
       cols,
@@ -450,18 +475,151 @@ export function generateWfcSampleMap(
     );
   }
 
-  const flatTiles = flattenPlacedTileIds(chosenFlatGrid, flatAtlasKey);
-  const elevatedTiles = flattenPlacedTileIds(chosenElevatedGrid, elevatedAtlasKey);
-  const foamStamps = buildSampleFoamStamps(chosenFlatMask, chosenCliffMask);
-  const shadowStamps = buildSampleShadowStamps(chosenPlateauMask, chosenFlatMask, chosenStairs);
+  const generatedPlateauLayers: GeneratedPlateauLayer[] = [chosenLevel2];
+  let currentSupportTopMask = chosenLevel2.plateauMask;
+  let currentSupportSurfaceMask = buildOccupiedMaskFromRenderedGrid(chosenLevel2.renderedGrid);
+  let previousAtlasKey = chosenLevel2.atlasKey;
+
+  for (let terrainLevel = 3; terrainLevel <= 4; terrainLevel++) {
+    const nextAllowance = (() => {
+      const interior = buildInteriorMask(currentSupportTopMask);
+      return countTrue(interior) > 0 ? interior : buildPlateauAllowance(currentSupportTopMask);
+    })();
+    if (countTrue(nextAllowance) < 4) {
+      break;
+    }
+
+    const sizeMultiplier = Math.max(0.62, 1.02 - (terrainLevel - 2) * 0.14 + rng() * 0.26);
+    const baseMask = buildNoisePlateauMask(
+      currentSupportTopMask,
+      nextAllowance,
+      seed + terrainLevel * 97,
+      randomness,
+      sizeMultiplier,
+    );
+    if (countTrue(baseMask) === 0) {
+      break;
+    }
+
+    const attempts = buildPlateauMaskAttempts(
+      currentSupportTopMask,
+      nextAllowance,
+      baseMask,
+      seed + terrainLevel * 197,
+      randomness,
+      mulberry32(seed + terrainLevel * 613),
+    );
+
+    let chosenUpperLevel: GeneratedPlateauLayer | null = null;
+    const levelAtlasKey = pickRandomAtlasKeyAvoiding(rng, usedAtlasKeys);
+    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
+      const plateauResult = ensurePlateauEntry(
+        currentSupportTopMask,
+        attempts[attemptIndex],
+        elevatedTopCandidates,
+        mulberry32(seed + terrainLevel * 1337 + attemptIndex * 37),
+        randomness,
+      );
+      const plateauMask = plateauResult.mask;
+      const stairs = plateauResult.stairs;
+      if (countTrue(plateauMask) === 0) {
+        continue;
+      }
+
+      const cliffBands = buildSampleCliffBands(currentSupportSurfaceMask, plateauMask, stairs, terrainLevel);
+      const deterministicElevatedTopGrid = buildElevatedTopPreferenceGrid(
+        plateauMask,
+        mapping,
+        levelAtlasKey,
+        stairs,
+      );
+      const elevatedTopRuleGrid = solveFixedMaskRuleLayer({
+        width: cols,
+        height: rows,
+        candidates: elevatedTopCandidates,
+        rng: mulberry32(seed + terrainLevel * 503 + attemptIndex * 19),
+        randomness,
+        targetMask: plateauMask,
+        preferredTileIds: extractTileIdGrid(deterministicElevatedTopGrid),
+        maxSearchSteps: Math.max(5000, cols * rows * 220),
+      });
+
+      if (!elevatedTopRuleGrid) {
+        continue;
+      }
+
+      const topGrid = retintPlacedGrid(projectPlacedRuleGrid(elevatedTopRuleGrid), levelAtlasKey);
+      chosenUpperLevel = {
+        terrainLevel,
+        atlasKey: levelAtlasKey,
+        supportMask: currentSupportTopMask,
+        plateauMask,
+        stairs,
+        cliffBands,
+        topGrid,
+        renderedGrid: buildElevatedGrid(
+          elevatedTopRuleGrid,
+          plateauMask,
+          cliffBands,
+          stairs,
+          mapping,
+          levelAtlasKey,
+        ),
+      };
+      break;
+    }
+
+    if (!chosenUpperLevel) {
+      break;
+    }
+
+    const supportLayer = generatedPlateauLayers[generatedPlateauLayers.length - 1];
+    tryExpandSupportLayerForUpperStairs(
+      supportLayer,
+      chosenUpperLevel.stairs,
+      elevatedTopCandidates,
+      mapping,
+      seed + terrainLevel * 761,
+      randomness,
+      cols,
+      rows,
+    );
+
+    generatedPlateauLayers.push(chosenUpperLevel);
+    currentSupportTopMask = chosenUpperLevel.plateauMask;
+    currentSupportSurfaceMask = buildOccupiedMaskFromRenderedGrid(chosenUpperLevel.renderedGrid);
+    previousAtlasKey = chosenUpperLevel.atlasKey;
+    usedAtlasKeys.add(chosenUpperLevel.atlasKey);
+  }
+
+  const flatTiles = flattenPlacedTileIds(chosenFlatGrid, flatAtlasKey, 1);
+  const elevatedTiles = generatedPlateauLayers.flatMap((layer) =>
+    flattenPlacedTileIds(layer.renderedGrid, layer.atlasKey, layer.terrainLevel),
+  );
+  const totalCliffMask = createBoolGrid(rows, cols, false);
+  const totalPlateauMask = createBoolGrid(rows, cols, false);
+  const allStairs = generatedPlateauLayers.flatMap((layer) => layer.stairs);
+  const shadowStamps = generatedPlateauLayers.flatMap((layer) =>
+    buildSampleShadowStamps(
+      layer.plateauMask,
+      layer.supportMask,
+      layer.stairs,
+      layer.terrainLevel,
+    ),
+  );
+  for (const layer of generatedPlateauLayers) {
+    applyMask(totalCliffMask, layer.cliffBands.mask, true);
+    applyMask(totalPlateauMask, layer.plateauMask, true);
+  }
+  const foamStamps = buildSampleFoamStamps(chosenFlatMask, totalCliffMask);
   const decorations = buildSampleDecorations(
     chosenFlatMask,
-    chosenPlateauMask,
-    chosenCliffMask,
-    chosenStairs,
+    totalPlateauMask,
+    totalCliffMask,
+    allStairs,
     seed,
   );
-  const conflictAudit = buildConflictAudit(workspace, chosenFlatGrid, chosenElevatedGrid);
+  const conflictAudit = buildConflictAudit(workspace, chosenFlatGrid, generatedPlateauLayers);
   return {
     cols,
     rows,
@@ -479,6 +637,7 @@ export function generateWfcSampleMap(
       landTiles: flatTiles.length,
       plateauTiles: elevatedTiles.length,
       ruleConflicts: conflictAudit.count,
+      maxTerrainLevel: Math.max(1, ...generatedPlateauLayers.map((layer) => layer.terrainLevel)),
     },
     failureReason: chosenFlatFailureReason ?? undefined,
     failureDiagnostics: null,
@@ -509,6 +668,7 @@ function buildFailedSampleMap(
       landTiles: 0,
       plateauTiles: 0,
       ruleConflicts: 0,
+      maxTerrainLevel: 1,
     },
     failureReason,
     failureDiagnostics: null,
@@ -527,8 +687,8 @@ function buildFlatOnlyPlacedSampleMap(
   failureReason: string,
 ): WfcSampleMap {
   const elevatedGrid = createTileGrid<{ tileId: number; atlasKey: AtlasKey } | null>(rows, cols, null);
-  const conflictAudit = buildConflictAudit(workspace, flatGrid, elevatedGrid);
-  const flatTiles = flattenPlacedTileIds(flatGrid, 'terrain-tileset');
+  const conflictAudit = buildConflictAudit(workspace, flatGrid, []);
+  const flatTiles = flattenPlacedTileIds(flatGrid, 'terrain-tileset', 1);
 
   return {
     cols,
@@ -553,6 +713,7 @@ function buildFlatOnlyPlacedSampleMap(
       landTiles: flatTiles.length,
       plateauTiles: 0,
       ruleConflicts: conflictAudit.count,
+      maxTerrainLevel: 1,
     },
     failureReason,
     failureDiagnostics: null,
@@ -2165,8 +2326,8 @@ function buildNoiseIslandMask(
   const mask = createBoolGrid(rows, cols, false);
   const centerCol = cols * (0.5 + sampleOffset(seed + 11) * 0.09);
   const centerRow = rows * (0.56 + sampleOffset(seed + 23) * 0.07);
-  const radiusX = cols * (0.27 + randomness * 0.16 + sampleOffset(seed + 31) * 0.04);
-  const radiusY = rows * (0.22 + randomness * 0.15 + sampleOffset(seed + 43) * 0.035);
+  const radiusX = cols * (0.295 + randomness * 0.17 + sampleOffset(seed + 31) * 0.04);
+  const radiusY = rows * (0.245 + randomness * 0.16 + sampleOffset(seed + 43) * 0.035);
   const scaleX = 0.17 + randomness * 0.06;
   const scaleY = 0.19 + randomness * 0.05;
 
@@ -2178,7 +2339,7 @@ function buildNoiseIslandMask(
       const lowNoise = noise(col * scaleX + 7.1, row * scaleY + 13.4);
       const hiNoise = noise(col * (scaleX * 2.3) + 101.2, row * (scaleY * 2.1) + 59.8) * 0.45;
       const warpedNoise = lowNoise * 0.75 + hiNoise;
-      const threshold = 0.88 + warpedNoise * (0.23 + randomness * 0.2);
+      const threshold = 0.905 + warpedNoise * (0.23 + randomness * 0.2);
       mask[row][col] = radial <= threshold;
     }
   }
@@ -2190,7 +2351,164 @@ function buildNoiseIslandMask(
     Math.round(centerCol),
   );
 
-  return countTrue(connected) >= 12 ? connected : createFallbackIslandMask(cols, rows);
+  const baseMask =
+    countTrue(connected) >= 12 ? connected : createFallbackIslandMask(cols, rows);
+  return carveInteriorPonds(baseMask, seed + 67, randomness);
+}
+
+function carveInteriorPonds(
+  landMask: boolean[][],
+  seed: number,
+  randomness: number,
+): boolean[][] {
+  const landTiles = countTrue(landMask);
+  if (landTiles < 90) {
+    return landMask;
+  }
+
+  const rows = landMask.length;
+  const cols = landMask[0]?.length ?? 0;
+  const rng = mulberry32(seed ^ 0x4f1bbcdc);
+  const result = cloneBoolGrid(landMask);
+  const centers: Array<{ row: number; col: number }> = [];
+  const pondTarget = Math.min(
+    18,
+    Math.max(
+      1,
+      Math.floor(landTiles / 520) + Math.floor(rng() * (1 + randomness * 5.5)),
+    ),
+  );
+  const maxAttempts = pondTarget * 7;
+  const minCenterDistance = Math.max(4, Math.floor(Math.sqrt(landTiles) / 8));
+  let carved = 0;
+
+  for (let attempt = 0; attempt < maxAttempts && carved < pondTarget; attempt++) {
+    const allowance = buildPondAllowance(result);
+    const allowanceCells = collectMaskCells(allowance);
+    if (allowanceCells.length === 0) {
+      break;
+    }
+    shuffleCellsInPlace(allowanceCells, rng);
+
+    const center =
+      allowanceCells.find((cell) =>
+        centers.every(
+          (existing) =>
+            Math.abs(existing.row - cell.row) + Math.abs(existing.col - cell.col) >= minCenterDistance,
+        ),
+      ) ?? allowanceCells[0];
+    if (!center) {
+      break;
+    }
+
+    const pondMask = buildNoisePondMask(
+      result,
+      allowance,
+      center.row,
+      center.col,
+      seed + attempt * 131,
+      randomness,
+      landTiles,
+    );
+    if (countTrue(pondMask) < 4) {
+      continue;
+    }
+
+    const carvedMask = cloneBoolGrid(result);
+    applyMask(carvedMask, pondMask, false);
+    if (!isSingleLandComponent(carvedMask)) {
+      continue;
+    }
+
+    applyMask(result, pondMask, false);
+    centers.push(center);
+    carved += 1;
+  }
+
+  return result;
+}
+
+function buildPondAllowance(landMask: boolean[][]): boolean[][] {
+  const strictAllowance = buildPondAllowanceWithMargin(landMask, 2);
+  return countTrue(strictAllowance) > 0
+    ? strictAllowance
+    : buildPondAllowanceWithMargin(landMask, 1);
+}
+
+function buildPondAllowanceWithMargin(
+  landMask: boolean[][],
+  margin: number,
+): boolean[][] {
+  const rows = landMask.length;
+  const cols = landMask[0]?.length ?? 0;
+  const allowance = createBoolGrid(rows, cols, false);
+
+  for (let row = margin; row < rows - margin; row++) {
+    for (let col = margin; col < cols - margin; col++) {
+      if (!landMask[row][col]) {
+        continue;
+      }
+
+      let supported = true;
+      for (let dr = -margin; dr <= margin && supported; dr++) {
+        for (let dc = -margin; dc <= margin; dc++) {
+          if (!hasLandMask(landMask, row + dr, col + dc)) {
+            supported = false;
+            break;
+          }
+        }
+      }
+
+      allowance[row][col] = supported;
+    }
+  }
+
+  return allowance;
+}
+
+function buildNoisePondMask(
+  landMask: boolean[][],
+  allowance: boolean[][],
+  centerRow: number,
+  centerCol: number,
+  seed: number,
+  randomness: number,
+  landTiles: number,
+): boolean[][] {
+  const rows = landMask.length;
+  const cols = landMask[0]?.length ?? 0;
+  const noise = createPerlinNoise2D(seed ^ 0x1d872b41);
+  const rng = mulberry32(seed ^ 0x83d2e74f);
+  const areaScale = Math.sqrt(Math.max(1, landTiles / 180));
+  const radiusX = Math.max(1.2, 1.1 + areaScale * (0.75 + rng() * 0.9) + randomness * 0.8);
+  const radiusY = Math.max(1.1, 1.0 + areaScale * (0.7 + rng() * 0.85) + randomness * 0.75);
+  const mask = createBoolGrid(rows, cols, false);
+  const rowStart = Math.max(0, Math.floor(centerRow - radiusY * 2.4));
+  const rowEnd = Math.min(rows - 1, Math.ceil(centerRow + radiusY * 2.4));
+  const colStart = Math.max(0, Math.floor(centerCol - radiusX * 2.5));
+  const colEnd = Math.min(cols - 1, Math.ceil(centerCol + radiusX * 2.5));
+  const scaleX = 0.42 + rng() * 0.2;
+  const scaleY = 0.44 + rng() * 0.18;
+
+  for (let row = rowStart; row <= rowEnd; row++) {
+    for (let col = colStart; col <= colEnd; col++) {
+      if (!allowance[row][col]) {
+        continue;
+      }
+
+      const dx = (col + 0.5 - centerCol) / radiusX;
+      const dy = (row + 0.5 - centerRow) / radiusY;
+      const radial = Math.sqrt(dx * dx + dy * dy);
+      const lowNoise = noise(col * scaleX + 31.8, row * scaleY + 9.6);
+      const hiNoise =
+        noise(col * (scaleX * 1.9) + 111.4, row * (scaleY * 2.1) + 64.3) * 0.33;
+      const threshold = 0.88 + (lowNoise * 0.7 + hiNoise) * (0.18 + randomness * 0.16);
+      mask[row][col] = radial <= threshold || radial <= 0.28;
+    }
+  }
+
+  const smoothed = smoothMask(mask, 1, allowance);
+  return keepLargestComponentNear(smoothed, centerRow, centerCol);
 }
 
 function buildNoisePlateauMask(
@@ -2278,7 +2596,7 @@ function buildPlateauMaskAttempts(
   rng: () => number,
 ): boolean[][][] {
   const attempts: boolean[][][] = [];
-  const secondaryMask = buildOptionalSecondaryPlateauMask(
+  const optionalMasks = buildOptionalPlateauMasks(
     flatMask,
     allowance,
     primaryMask,
@@ -2287,48 +2605,75 @@ function buildPlateauMaskAttempts(
     rng,
   );
 
-  if (secondaryMask) {
-    attempts.push(unionMasks(primaryMask, secondaryMask));
+  let combinedMask = cloneBoolGrid(primaryMask);
+  const combinedAttempts: boolean[][][] = [];
+  for (const optionalMask of optionalMasks) {
+    combinedMask = unionMasks(combinedMask, optionalMask);
+    combinedAttempts.push(cloneBoolGrid(combinedMask));
+  }
+
+  for (let index = combinedAttempts.length - 1; index >= 0; index--) {
+    attempts.push(combinedAttempts[index]);
   }
   attempts.push(primaryMask);
 
   return attempts;
 }
 
-function buildOptionalSecondaryPlateauMask(
+function buildOptionalPlateauMasks(
   flatMask: boolean[][],
   allowance: boolean[][],
   primaryMask: boolean[][],
   seed: number,
   randomness: number,
   rng: () => number,
-): boolean[][] | null {
+): boolean[][][] {
   const landTiles = countTrue(flatMask);
   const allowanceTiles = countTrue(allowance);
   if (landTiles < 65 || allowanceTiles < 24) {
-    return null;
+    return [];
   }
 
-  const chance = Math.min(0.72, 0.22 + randomness * 0.28 + (landTiles - 65) / 180);
-  if (rng() >= chance) {
-    return null;
-  }
-
-  const secondaryAllowance = buildSecondaryPlateauAllowance(allowance, primaryMask, 2);
-  if (countTrue(secondaryAllowance) < 8) {
-    return null;
-  }
-
-  const sizeMultiplier = 0.55 + rng() * 0.55;
-  const secondaryMask = buildNoisePlateauMask(
-    flatMask,
-    secondaryAllowance,
-    seed,
-    randomness,
-    sizeMultiplier,
+  const maxExtraChunks = Math.max(
+    0,
+    Math.min(4, Math.floor((landTiles - 50) / 90) + (randomness >= 0.55 ? 1 : 0)),
   );
+  if (maxExtraChunks <= 0) {
+    return [];
+  }
 
-  return countTrue(secondaryMask) >= 4 ? secondaryMask : null;
+  const chunkChance = Math.min(0.9, 0.32 + randomness * 0.4 + (landTiles - 65) / 260);
+  const optionalMasks: boolean[][][] = [];
+  let combinedMask = cloneBoolGrid(primaryMask);
+
+  for (let chunkIndex = 0; chunkIndex < maxExtraChunks; chunkIndex++) {
+    if (rng() >= chunkChance) {
+      continue;
+    }
+
+    const nextAllowance = buildSecondaryPlateauAllowance(allowance, combinedMask, 2);
+    if (countTrue(nextAllowance) < 8) {
+      break;
+    }
+
+    const sizeMultiplier = 0.4 + rng() * 0.9;
+    const optionalMask = buildNoisePlateauMask(
+      flatMask,
+      nextAllowance,
+      seed + chunkIndex * 131,
+      randomness,
+      sizeMultiplier,
+    );
+
+    if (countTrue(optionalMask) < 4) {
+      continue;
+    }
+
+    optionalMasks.push(optionalMask);
+    combinedMask = unionMasks(combinedMask, optionalMask);
+  }
+
+  return optionalMasks;
 }
 
 function buildSecondaryPlateauAllowance(
@@ -2561,6 +2906,15 @@ function pickRandomAtlasKey(rng: () => number, exclude?: AtlasKey): AtlasKey {
   return pool[Math.floor(rng() * pool.length)];
 }
 
+function pickRandomAtlasKeyAvoiding(
+  rng: () => number,
+  used: ReadonlySet<AtlasKey>,
+): AtlasKey {
+  const pool = TERRAIN_COLOR_ATLAS_KEYS.filter((atlasKey) => !used.has(atlasKey));
+  const candidates = pool.length > 0 ? pool : TERRAIN_COLOR_ATLAS_KEYS;
+  return candidates[Math.floor(rng() * candidates.length)];
+}
+
 function sampleOffset(seed: number): number {
   return mulberry32(seed)() * 2 - 1;
 }
@@ -2636,6 +2990,45 @@ function buildPlateauAllowance(landMask: boolean[][]): boolean[][] {
   return allowance;
 }
 
+function collectMaskCells(mask: boolean[][]): Array<{ row: number; col: number }> {
+  const cells: Array<{ row: number; col: number }> = [];
+  for (let row = 0; row < mask.length; row++) {
+    for (let col = 0; col < mask[row].length; col++) {
+      if (mask[row][col]) {
+        cells.push({ row, col });
+      }
+    }
+  }
+  return cells;
+}
+
+function shuffleCellsInPlace<T>(cells: T[], rng: () => number): void {
+  for (let index = cells.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(rng() * (index + 1));
+    const current = cells[index];
+    cells[index] = cells[swapIndex];
+    cells[swapIndex] = current;
+  }
+}
+
+function isSingleLandComponent(mask: boolean[][]): boolean {
+  const total = countTrue(mask);
+  if (total <= 0) {
+    return false;
+  }
+
+  for (let row = 0; row < mask.length; row++) {
+    for (let col = 0; col < mask[row].length; col++) {
+      if (!mask[row][col]) {
+        continue;
+      }
+      return countTrue(keepLargestComponentNear(mask, row, col)) === total;
+    }
+  }
+
+  return false;
+}
+
 function intersectMasks(left: boolean[][], right: boolean[][]): boolean[][] {
   const rows = left.length;
   const cols = left[0]?.length ?? 0;
@@ -2653,13 +3046,91 @@ function intersectMasks(left: boolean[][], right: boolean[][]): boolean[][] {
 function ensurePlateauEntry(
   landMask: boolean[][],
   plateauMask: boolean[][],
+  elevatedTopCandidates: TerrainGrammarTile[],
   rng: () => number,
   randomness: number,
 ): { mask: boolean[][]; stairs: StairPreviewList } {
+  const regularizedMask = regularizeMaskToSupportedTopologies(
+    plateauMask,
+    elevatedTopCandidates,
+  );
+
   return {
-    mask: plateauMask,
-    stairs: pickStairCandidatesFromMask(landMask, plateauMask, rng, randomness),
+    mask: regularizedMask,
+    stairs: pickStairCandidatesFromMask(landMask, regularizedMask, rng, randomness),
   };
+}
+
+function regularizeMaskToSupportedTopologies(
+  mask: boolean[][],
+  candidates: TerrainGrammarTile[],
+): boolean[][] {
+  const rows = mask.length;
+  const cols = mask[0]?.length ?? 0;
+  const regularized = mask.map((row) => [...row]);
+  const supportedTopologies = new Set<number>();
+
+  for (const candidate of candidates) {
+    let topology = 0;
+    if (candidate.adjacencyRules.north.length > 0) {
+      topology |= 1;
+    }
+    if (candidate.adjacencyRules.east.length > 0) {
+      topology |= 2;
+    }
+    if (candidate.adjacencyRules.south.length > 0) {
+      topology |= 4;
+    }
+    if (candidate.adjacencyRules.west.length > 0) {
+      topology |= 8;
+    }
+    supportedTopologies.add(topology);
+  }
+
+  let changed = true;
+  let passes = 0;
+  while (changed && passes < rows * cols) {
+    changed = false;
+    passes += 1;
+    const removals: Array<{ row: number; col: number }> = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        if (!regularized[row][col]) {
+          continue;
+        }
+
+        let topology = 0;
+        if (hasLandMask(regularized, row - 1, col)) {
+          topology |= 1;
+        }
+        if (hasLandMask(regularized, row, col + 1)) {
+          topology |= 2;
+        }
+        if (hasLandMask(regularized, row + 1, col)) {
+          topology |= 4;
+        }
+        if (hasLandMask(regularized, row, col - 1)) {
+          topology |= 8;
+        }
+
+        if (!supportedTopologies.has(topology)) {
+          removals.push({ row, col });
+        }
+      }
+    }
+
+    if (removals.length === 0) {
+      break;
+    }
+
+    changed = true;
+    for (const removal of removals) {
+      regularized[removal.row][removal.col] = false;
+    }
+  }
+
+  return regularized;
 }
 
 function pickStairCandidatesFromMask(
@@ -2708,30 +3179,41 @@ function pickStairCandidatesFromMask(
     return [];
   }
 
-  const stairChance = Math.min(0.92, 0.65 + randomness * 0.3);
-  const left = pickOutermostStairCandidate(
+  const plateauTiles = countTrue(plateauMask);
+  const stairChance = Math.min(0.995, 0.9 + randomness * 0.08);
+  const extraStairChance = Math.min(0.82, 0.28 + randomness * 0.32 + plateauTiles / 220);
+  const perSideCap = Math.max(1, Math.min(3, 1 + Math.floor(Math.max(0, plateauTiles - 12) / 22)));
+  const left = pickMultipleOutermostStairCandidates(
     candidates.filter((candidate) => candidate.variant === 'left'),
     cols,
-    rng,
+    perSideCap,
+    3,
   );
-  const right = pickOutermostStairCandidate(
+  const right = pickMultipleOutermostStairCandidates(
     candidates.filter((candidate) => candidate.variant === 'right'),
     cols,
-    rng,
+    perSideCap,
+    3,
   );
 
   const selected: StairPreviewSpec[] = [];
-  if (left && rng() < stairChance) {
-    selected.push(left);
+  for (let index = 0; index < left.length; index++) {
+    const chance = index === 0 ? stairChance : extraStairChance;
+    if (rng() < chance) {
+      selected.push(left[index]);
+    }
   }
-  if (
-    right &&
-    rng() < stairChance &&
-    !selected.some(
-      (candidate) => candidate.col === right.col && candidate.topRow === right.topRow,
-    )
-  ) {
-    selected.push(right);
+  for (let index = 0; index < right.length; index++) {
+    const chance = index === 0 ? stairChance : extraStairChance;
+    if (
+      rng() < chance &&
+      !selected.some(
+        (candidate) =>
+          candidate.col === right[index].col && candidate.topRow === right[index].topRow,
+      )
+    ) {
+      selected.push(right[index]);
+    }
   }
 
   return selected;
@@ -2773,6 +3255,104 @@ function widenFlatMaskForStairs(
   return widened;
 }
 
+function widenElevatedSupportMaskForStairs(
+  supportMask: boolean[][],
+  stairs: StairPreviewList,
+): boolean[][] {
+  const widened = supportMask.map((row) => [...row]);
+  const rows = widened.length;
+  const cols = widened[0]?.length ?? 0;
+
+  for (const stair of stairs) {
+    const lowerRow = stair.topRow + 1;
+    const outwardSign = stair.variant === 'left' ? -1 : 1;
+
+    for (const [rowOffset, colOffset] of [
+      [0, -1],
+      [0, 0],
+      [0, 1],
+      [1, -1],
+      [1, 0],
+      [1, 1],
+      [-1, 0],
+      [0, outwardSign * 2],
+      [1, outwardSign],
+    ] as const) {
+      const row = lowerRow + rowOffset;
+      const col = stair.col + colOffset;
+      if (hasInBounds(row, col, rows, cols)) {
+        widened[row][col] = true;
+      }
+    }
+  }
+
+  return widened;
+}
+
+function tryExpandSupportLayerForUpperStairs(
+  supportLayer: GeneratedPlateauLayer,
+  upperStairs: StairPreviewList,
+  elevatedTopCandidates: TerrainGrammarTile[],
+  mapping: TerrainAtlasMapping,
+  seed: number,
+  randomness: number,
+  cols: number,
+  rows: number,
+): void {
+  if (upperStairs.length === 0) {
+    return;
+  }
+
+  const widenedMask = regularizeMaskToSupportedTopologies(
+    widenElevatedSupportMaskForStairs(supportLayer.plateauMask, upperStairs),
+    elevatedTopCandidates,
+  );
+  if (areMasksEqual(widenedMask, supportLayer.plateauMask)) {
+    return;
+  }
+
+  const deterministicTopGrid = buildElevatedTopPreferenceGrid(
+    widenedMask,
+    mapping,
+    supportLayer.atlasKey,
+    supportLayer.stairs,
+  );
+  const solvedTopGrid = solveFixedMaskRuleLayer({
+    width: cols,
+    height: rows,
+    candidates: elevatedTopCandidates,
+    rng: mulberry32(seed),
+    randomness,
+    targetMask: widenedMask,
+    preferredTileIds: extractTileIdGrid(deterministicTopGrid),
+    maxSearchSteps: Math.max(5000, cols * rows * 220),
+  });
+
+  if (!solvedTopGrid) {
+    return;
+  }
+
+  supportLayer.plateauMask = widenedMask;
+  supportLayer.cliffBands = buildSampleCliffBands(
+    supportLayer.supportMask,
+    widenedMask,
+    supportLayer.stairs,
+    supportLayer.terrainLevel,
+  );
+  supportLayer.topGrid = retintPlacedGrid(
+    projectPlacedRuleGrid(solvedTopGrid),
+    supportLayer.atlasKey,
+  );
+  supportLayer.renderedGrid = buildElevatedGrid(
+    solvedTopGrid,
+    widenedMask,
+    supportLayer.cliffBands,
+    supportLayer.stairs,
+    mapping,
+    supportLayer.atlasKey,
+  );
+}
+
 function areMasksEqual(left: boolean[][], right: boolean[][]): boolean {
   if (left.length !== right.length || left[0]?.length !== right[0]?.length) {
     return false;
@@ -2802,52 +3382,62 @@ function hasClearStairApproach(
   );
 }
 
-function pickOutermostStairCandidate(
+function pickMultipleOutermostStairCandidates(
   candidates: StairPreviewSpec[],
   cols: number,
-  rng: () => number,
-): StairPreviewSpec | null {
+  maxCount: number,
+  minRowGap: number,
+): StairPreviewSpec[] {
   if (candidates.length === 0) {
-    return null;
+    return [];
   }
 
-  const leftCandidates = candidates
-    .filter((candidate) => candidate.variant === 'left')
-    .sort((left, right) => left.col - right.col || right.topRow - left.topRow);
-  const rightCandidates = candidates
-    .filter((candidate) => candidate.variant === 'right')
-    .sort((left, right) => right.col - left.col || right.topRow - left.topRow);
+  const sorted = [...candidates].sort((left, right) => {
+    const leftDistance = left.variant === 'left' ? left.col : cols - 1 - left.col;
+    const rightDistance = right.variant === 'left' ? right.col : cols - 1 - right.col;
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    if (right.topRow !== left.topRow) {
+      return right.topRow - left.topRow;
+    }
+    return right.col - left.col;
+  });
 
-  const edgeChoices = [leftCandidates[0], rightCandidates[0]].filter(Boolean) as StairPreviewSpec[];
-  if (edgeChoices.length === 1) {
-    return edgeChoices[0];
-  }
-  if (edgeChoices.length === 0) {
-    return candidates[0];
-  }
-
+  const picks: StairPreviewSpec[] = [];
   const center = (cols - 1) / 2;
-  edgeChoices.sort((left, right) => {
+  for (const candidate of sorted) {
+    if (
+      picks.some(
+        (picked) =>
+          Math.abs(picked.topRow - candidate.topRow) < minRowGap ||
+          Math.abs(picked.col - candidate.col) + Math.abs(picked.topRow - candidate.topRow) < 3,
+      )
+    ) {
+      continue;
+    }
+
+    picks.push(candidate);
+    if (picks.length >= maxCount) {
+      break;
+    }
+  }
+
+  return picks.sort((left, right) => {
     const leftDistance = Math.abs(left.col - center);
     const rightDistance = Math.abs(right.col - center);
     if (rightDistance !== leftDistance) {
       return rightDistance - leftDistance;
     }
-    if (right.topRow !== left.topRow) {
-      return right.topRow - left.topRow;
-    }
-    return 0;
+    return right.topRow - left.topRow;
   });
-
-  const bestDistance = Math.abs(edgeChoices[0].col - center);
-  const tied = edgeChoices.filter((candidate) => Math.abs(candidate.col - center) === bestDistance);
-  return tied[Math.floor(rng() * tied.length)];
 }
 
 function buildSampleCliffBands(
   landMask: boolean[][],
   plateauMask: boolean[][],
-  _stairs: StairPreviewList,
+  stairs: StairPreviewList,
+  terrainLevel: number,
 ): {
   land: boolean[][];
   water: boolean[][];
@@ -2855,6 +3445,7 @@ function buildSampleCliffBands(
 } {
   const rows = landMask.length;
   const cols = landMask[0]?.length ?? 0;
+  const cliffCandidates = createBoolGrid(rows, cols, false);
   const land = createBoolGrid(rows, cols, false);
   const water = createBoolGrid(rows, cols, false);
 
@@ -2863,12 +3454,36 @@ function buildSampleCliffBands(
       if (!plateauMask[row][col] || plateauMask[row + 1][col]) {
         continue;
       }
+      cliffCandidates[row + 1][col] = true;
+    }
+  }
 
-      if (landMask[row + 1][col]) {
-        land[row + 1][col] = true;
-      } else {
-        water[row + 1][col] = true;
+  const solidMask = createBoolGrid(rows, cols, false);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      solidMask[row][col] = landMask[row][col] || plateauMask[row][col] || cliffCandidates[row][col];
+    }
+  }
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (!cliffCandidates[row][col]) {
+        continue;
       }
+      if (terrainLevel === 2 && !hasLandMask(solidMask, row + 1, col)) {
+        water[row][col] = true;
+      } else {
+        land[row][col] = true;
+      }
+    }
+  }
+
+  for (const stair of stairs) {
+    const lowerRow = stair.topRow + 1;
+
+    if (hasInBounds(lowerRow, stair.col, rows, cols)) {
+      land[lowerRow][stair.col] = false;
+      water[lowerRow][stair.col] = false;
     }
   }
 
@@ -3045,6 +3660,22 @@ function buildElevatedTopPreferenceGrid(
   return grid;
 }
 
+function buildOccupiedMaskFromRenderedGrid(
+  grid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>,
+): boolean[][] {
+  const rows = grid.length;
+  const cols = grid[0]?.length ?? 0;
+  const mask = createBoolGrid(rows, cols, false);
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      mask[row][col] = grid[row][col] !== null;
+    }
+  }
+
+  return mask;
+}
+
 function normalizeDerivedCliffTiles(
   grid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>,
   cliffBands: {
@@ -3109,6 +3740,7 @@ function buildSampleShadowStamps(
   plateauMask: boolean[][],
   landMask: boolean[][],
   stairs: StairPreviewList,
+  terrainLevel: number,
 ): WfcSampleOverlay[] {
   const rows = plateauMask.length;
   const cols = plateauMask[0]?.length ?? 0;
@@ -3131,6 +3763,7 @@ function buildSampleShadowStamps(
         row: row + 1,
         col,
         scale: 1,
+        terrainLevel,
       });
     }
   }
@@ -3164,6 +3797,7 @@ function buildSampleFoamStamps(
           row,
           col,
           scale: 1,
+          terrainLevel: 1,
         });
       }
     }
@@ -3185,7 +3819,39 @@ function buildSampleDecorations(
   const visibleGroundMask = createBoolGrid(rows, cols, false);
   const blockedGroundMask = createBoolGrid(rows, cols, false);
   const decorations: WfcSampleDecoration[] = [];
-  const occupied: Array<{ x: number; y: number; radius: number }> = [];
+  type DecorationSlot = 'nw' | 'ne' | 'sw' | 'se';
+  const occupied: Array<{
+    x: number;
+    y: number;
+    radius: number;
+    row: number;
+    col: number;
+    kind: WfcSampleDecoration['kind'];
+    layer: WfcSampleDecoration['layer'];
+    slot: DecorationSlot;
+  }> = [];
+  const occupantsByCell = new Map<
+    string,
+    Array<{
+      kind: WfcSampleDecoration['kind'];
+      layer: WfcSampleDecoration['layer'];
+      slot: DecorationSlot;
+    }>
+  >();
+  const slotOffsets: Record<'land' | 'water', Record<DecorationSlot, { x: number; y: number }>> = {
+    land: {
+      nw: { x: -0.31, y: 0.68 },
+      ne: { x: 0.31, y: 0.68 },
+      sw: { x: -0.28, y: 0.95 },
+      se: { x: 0.28, y: 0.95 },
+    },
+    water: {
+      nw: { x: -0.3, y: 0.63 },
+      ne: { x: 0.3, y: 0.63 },
+      sw: { x: -0.24, y: 0.86 },
+      se: { x: 0.24, y: 0.86 },
+    },
+  };
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -3215,15 +3881,118 @@ function buildSampleDecorations(
     }
   }
 
-  const canReserve = (x: number, y: number, radius: number): boolean =>
+  const canShareCell = (
+    row: number,
+    col: number,
+    kind: WfcSampleDecoration['kind'],
+    layer: WfcSampleDecoration['layer'],
+    slot: DecorationSlot,
+  ): boolean => {
+    const key = `${row},${col}`;
+    const existing = occupantsByCell.get(key) ?? [];
+    if (existing.length === 0) {
+      return true;
+    }
+    if (existing.some((entry) => entry.slot === slot)) {
+      return false;
+    }
+    if (kind === 'tree') {
+      return false;
+    }
+    if (layer === 'water') {
+      return (
+        kind === 'water-rock' &&
+        existing.length < 3 &&
+        existing.every((entry) => entry.layer === 'water' && entry.kind === 'water-rock')
+      );
+    }
+    if (existing.some((entry) => entry.kind === 'tree' || entry.layer !== layer)) {
+      return false;
+    }
+    if (kind === 'bush') {
+      const rockCount = existing.filter((entry) => entry.kind === 'rock').length;
+      const bushCount = existing.filter((entry) => entry.kind === 'bush').length;
+      return rockCount <= 1 && bushCount < 3 && existing.length < 4;
+    }
+    if (kind === 'rock') {
+      const rockCount = existing.filter((entry) => entry.kind === 'rock').length;
+      const bushCount = existing.filter((entry) => entry.kind === 'bush').length;
+      return (
+        rockCount < 2 &&
+        bushCount <= 3 &&
+        existing.length < 4 &&
+        existing.every((entry) => entry.kind === 'bush' || entry.kind === 'rock')
+      );
+    }
+    return false;
+  };
+
+  const canReserve = (
+    row: number,
+    col: number,
+    kind: WfcSampleDecoration['kind'],
+    layer: WfcSampleDecoration['layer'],
+    slot: DecorationSlot,
+    x: number,
+    y: number,
+    radius: number,
+  ): boolean =>
+    canShareCell(row, col, kind, layer, slot) &&
     occupied.every((entry) => {
       const dx = entry.x - x;
       const dy = entry.y - y;
-      return Math.sqrt(dx * dx + dy * dy) >= entry.radius + radius;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (entry.row === row && entry.col === col) {
+        const minDistance =
+          entry.layer === layer && entry.kind !== 'tree' && kind !== 'tree'
+            ? Math.max(0.06, entry.radius * 0.18 + radius * 0.18)
+            : entry.radius + radius;
+        return distance >= minDistance;
+      }
+      return distance >= entry.radius + radius;
     });
 
-  const reserve = (x: number, y: number, radius: number) => {
-    occupied.push({ x, y, radius });
+  const reserve = (
+    row: number,
+    col: number,
+    kind: WfcSampleDecoration['kind'],
+    layer: WfcSampleDecoration['layer'],
+    slot: DecorationSlot,
+    x: number,
+    y: number,
+    radius: number,
+  ) => {
+    occupied.push({ x, y, radius, row, col, kind, layer, slot });
+    const key = `${row},${col}`;
+    const entries = occupantsByCell.get(key) ?? [];
+    entries.push({ kind, layer, slot });
+    occupantsByCell.set(key, entries);
+  };
+
+  const pickSlot = (
+    row: number,
+    col: number,
+    kind: WfcSampleDecoration['kind'],
+    layer: WfcSampleDecoration['layer'],
+    preferredSlots?: DecorationSlot[],
+  ): DecorationSlot | null => {
+    const key = `${row},${col}`;
+    const existing = occupantsByCell.get(key) ?? [];
+    const allSlots: DecorationSlot[] = preferredSlots
+      ? [...preferredSlots]
+      : ['nw', 'ne', 'sw', 'se'];
+    const ordered = shuffleCells(
+      allSlots.map((slot, index) => ({ row: index, col: 0, slot })),
+    ).map((entry) => entry.slot);
+    for (const slot of ordered) {
+      if (canShareCell(row, col, kind, layer, slot)) {
+        if (kind === 'tree' && existing.length > 0) {
+          continue;
+        }
+        return slot;
+      }
+    }
+    return null;
   };
 
   const buildDecoration = (
@@ -3236,21 +4005,29 @@ function buildSampleDecorations(
       offsetX: number;
       offsetY: number;
       frameIndex?: number;
+      preferredSlots?: DecorationSlot[];
     },
   ): WfcSampleDecoration | null => {
-    const x = col + 0.5 + options.offsetX;
-    const y = row + options.offsetY;
-    if (!canReserve(x, y, radius)) {
+    const slot = pickSlot(row, col, asset.kind, layer, options.preferredSlots);
+    if (!slot) {
       return null;
     }
-    reserve(x, y, radius);
+    const slotBase = slotOffsets[layer][slot];
+    const totalOffsetX = slotBase.x + options.offsetX;
+    const totalOffsetY = slotBase.y + options.offsetY;
+    const x = col + 0.5 + totalOffsetX;
+    const y = row + totalOffsetY;
+    if (!canReserve(row, col, asset.kind, layer, slot, x, y, radius)) {
+      return null;
+    }
+    reserve(row, col, asset.kind, layer, slot, x, y, radius);
     return {
       kind: asset.kind,
       layer,
       row,
       col,
-      offsetX: options.offsetX,
-      offsetY: options.offsetY,
+      offsetX: totalOffsetX,
+      offsetY: totalOffsetY,
       width: asset.width,
       height: asset.height,
       src: asset.src,
@@ -3279,6 +4056,207 @@ function buildSampleDecorations(
       (sum, { dr, dc }) => sum + (hasLandMask(visibleGroundMask, row + dr, col + dc) ? 1 : 0),
       0,
     );
+
+  const adjacencyCount = (mask: boolean[][], row: number, col: number) =>
+    CARDINALS.reduce(
+      (sum, { dr, dc }) => sum + (hasLandMask(mask, row + dr, col + dc) ? 1 : 0),
+      0,
+    );
+
+  const radiusMaskCount = (mask: boolean[][], row: number, col: number, radius: number) => {
+    let count = 0;
+    for (let dr = -radius; dr <= radius; dr++) {
+      for (let dc = -radius; dc <= radius; dc++) {
+        if (dr === 0 && dc === 0) {
+          continue;
+        }
+        if (hasLandMask(mask, row + dr, col + dc)) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  };
+
+  const getPreferredLandEdgeSlots = (row: number, col: number): DecorationSlot[] => {
+    const slotScores: Record<DecorationSlot, number> = { nw: 0, ne: 0, sw: 0, se: 0 };
+    const northOpen = !hasLandMask(visibleGroundMask, row - 1, col);
+    const southOpen = !hasLandMask(visibleGroundMask, row + 1, col);
+    const westOpen = !hasLandMask(visibleGroundMask, row, col - 1);
+    const eastOpen = !hasLandMask(visibleGroundMask, row, col + 1);
+
+    if (northOpen) {
+      slotScores.nw += 2;
+      slotScores.ne += 2;
+    }
+    if (southOpen) {
+      slotScores.sw += 2;
+      slotScores.se += 2;
+    }
+    if (westOpen) {
+      slotScores.nw += 2;
+      slotScores.sw += 2;
+    }
+    if (eastOpen) {
+      slotScores.ne += 2;
+      slotScores.se += 2;
+    }
+
+    const cliffNorth = hasLandMask(cliffMask, row - 1, col);
+    const cliffSouth = hasLandMask(cliffMask, row + 1, col);
+    const cliffWest = hasLandMask(cliffMask, row, col - 1);
+    const cliffEast = hasLandMask(cliffMask, row, col + 1);
+
+    if (cliffNorth) {
+      slotScores.nw += 1.2;
+      slotScores.ne += 1.2;
+    }
+    if (cliffSouth) {
+      slotScores.sw += 1.2;
+      slotScores.se += 1.2;
+    }
+    if (cliffWest) {
+      slotScores.nw += 1.2;
+      slotScores.sw += 1.2;
+    }
+    if (cliffEast) {
+      slotScores.ne += 1.2;
+      slotScores.se += 1.2;
+    }
+
+    return (['nw', 'ne', 'sw', 'se'] as DecorationSlot[]).sort((left, right) => {
+      const delta = slotScores[right] - slotScores[left];
+      return Math.abs(delta) > 0.001 ? delta : rng() - 0.5;
+    });
+  };
+
+  const getPreferredWaterEdgeSlots = (row: number, col: number): DecorationSlot[] => {
+    const slotScores: Record<DecorationSlot, number> = { nw: 0, ne: 0, sw: 0, se: 0 };
+    const northLand = hasLandMask(flatMask, row - 1, col) || hasLandMask(cliffMask, row - 1, col);
+    const southLand = hasLandMask(flatMask, row + 1, col) || hasLandMask(cliffMask, row + 1, col);
+    const westLand = hasLandMask(flatMask, row, col - 1) || hasLandMask(cliffMask, row, col - 1);
+    const eastLand = hasLandMask(flatMask, row, col + 1) || hasLandMask(cliffMask, row, col + 1);
+
+    if (northLand) {
+      slotScores.nw += 2;
+      slotScores.ne += 2;
+    }
+    if (southLand) {
+      slotScores.sw += 2;
+      slotScores.se += 2;
+    }
+    if (westLand) {
+      slotScores.nw += 2;
+      slotScores.sw += 2;
+    }
+    if (eastLand) {
+      slotScores.ne += 2;
+      slotScores.se += 2;
+    }
+
+    return (['nw', 'ne', 'sw', 'se'] as DecorationSlot[]).sort((left, right) => {
+      const delta = slotScores[right] - slotScores[left];
+      return Math.abs(delta) > 0.001 ? delta : rng() - 0.5;
+    });
+  };
+
+  const decorNoise = createPerlinNoise2D(seed ^ 0x4bf31c27);
+
+  const buildDistanceField = (
+    seeds: Array<{ row: number; col: number }>,
+    passable: (row: number, col: number) => boolean,
+  ): number[][] => {
+    const distances = Array.from({ length: rows }, () =>
+      Array<number>(cols).fill(Number.POSITIVE_INFINITY),
+    );
+    const queue = [...seeds];
+    let head = 0;
+    for (const cell of seeds) {
+      distances[cell.row][cell.col] = 0;
+    }
+    while (head < queue.length) {
+      const current = queue[head++];
+      const currentDistance = distances[current.row][current.col];
+      for (const { dr, dc } of CARDINALS) {
+        const nextRow = current.row + dr;
+        const nextCol = current.col + dc;
+        if (!hasInBounds(nextRow, nextCol, rows, cols) || !passable(nextRow, nextCol)) {
+          continue;
+        }
+        if (distances[nextRow][nextCol] <= currentDistance + 1) {
+          continue;
+        }
+        distances[nextRow][nextCol] = currentDistance + 1;
+        queue.push({ row: nextRow, col: nextCol });
+      }
+    }
+    return distances;
+  };
+
+  type ScoredCell = { row: number; col: number; score: number };
+
+  const scoreCells = (
+    cells: Array<{ row: number; col: number }>,
+    scorer: (row: number, col: number) => number,
+  ): ScoredCell[] =>
+    cells
+      .map(({ row, col }) => ({ row, col, score: scorer(row, col) }))
+      .filter((cell) => cell.score > 0.05);
+
+  const weightedPickScored = (cells: ScoredCell[]): ScoredCell => {
+    const total = cells.reduce((sum, cell) => sum + Math.max(0.05, cell.score), 0);
+    let roll = rng() * total;
+    for (const cell of cells) {
+      roll -= Math.max(0.05, cell.score);
+      if (roll <= 0) {
+        return cell;
+      }
+    }
+    return cells[cells.length - 1];
+  };
+
+  const pickSpacedAnchors = (
+    cells: ScoredCell[],
+    anchorCount: number,
+    minSpacing: number,
+  ): ScoredCell[] => {
+    if (anchorCount <= 0 || cells.length === 0) {
+      return [];
+    }
+    const spacingSq = minSpacing * minSpacing;
+    const pool = [...cells];
+    const anchors: ScoredCell[] = [];
+
+    while (anchors.length < anchorCount && pool.length > 0) {
+      const picked = weightedPickScored(pool);
+      anchors.push(picked);
+      for (let index = pool.length - 1; index >= 0; index--) {
+        const dr = pool[index].row - picked.row;
+        const dc = pool[index].col - picked.col;
+        if (dr * dr + dc * dc <= spacingSq) {
+          pool.splice(index, 1);
+        }
+      }
+    }
+
+    return anchors;
+  };
+
+  const sortClusterCandidates = (
+    anchor: { row: number; col: number },
+    cells: ScoredCell[],
+    radius: number,
+  ): ScoredCell[] =>
+    cells
+      .filter((cell) => {
+        const dr = cell.row - anchor.row;
+        const dc = cell.col - anchor.col;
+        return dr * dr + dc * dc <= radius * radius;
+      })
+      .sort(
+        (left, right) =>
+          right.score + rng() * 0.18 - (left.score + rng() * 0.18),
+      );
 
   const gatherGroundCandidates = (
     predicate: (row: number, col: number) => boolean,
@@ -3342,43 +4320,262 @@ function buildSampleDecorations(
   const bushCandidates = gatherGroundCandidates((row, col) => surfaceNeighborCount(row, col) >= 2);
   const rockCandidates = gatherGroundCandidates((row, col) => surfaceNeighborCount(row, col) >= 1);
 
-  const treeTarget = visibleArea >= 18 ? Math.min(4, Math.floor(visibleArea / 38) + (rng() < 0.6 ? 1 : 0)) : 0;
-  const bushTarget = Math.min(10, Math.floor(visibleArea / 16) + 1 + Math.floor(rng() * 3));
-  const rockTarget = Math.min(6, Math.max(1, Math.floor(visibleArea / 24) + Math.floor(rng() * 2)));
-  const waterRockTarget = Math.min(5, waterCandidates.length > 0 ? 1 + Math.floor(waterCandidates.length / 14) : 0);
+  const coastSeedCells = gatherGroundCandidates(
+    (row, col) => cardinalWaterCount(visibleGroundMask, row, col) > 0,
+  );
+  const cliffSeedCells = gatherGroundCandidates(
+    (row, col) => adjacencyCount(cliffMask, row, col) > 0,
+  );
+  const coastDistance = buildDistanceField(
+    coastSeedCells,
+    (row, col) => visibleGroundMask[row][col] && !blockedGroundMask[row][col],
+  );
+  const cliffDistance = buildDistanceField(
+    cliffSeedCells,
+    (row, col) => visibleGroundMask[row][col] && !blockedGroundMask[row][col],
+  );
 
-  tryPlaceMany(treeCandidates, treeTarget, (row, col) => {
+  const treeScored = scoreCells(treeCandidates, (row, col) => {
+    const coast = Number.isFinite(coastDistance[row][col]) ? coastDistance[row][col] : 6;
+    const cliff = Number.isFinite(cliffDistance[row][col]) ? cliffDistance[row][col] : 5;
+    const openness = surfaceNeighborCount(row, col);
+    const localNoise = decorNoise(col * 0.16 + 7.4, row * 0.15 + 19.1);
+    return (
+      0.4 +
+      Math.min(5, coast) * 1.15 +
+      Math.min(3, cliff) * 0.35 +
+      openness * 0.7 +
+      radiusMaskCount(visibleGroundMask, row, col, 2) * 0.06 +
+      localNoise * 0.9
+    );
+  });
+  const bushScored = scoreCells(bushCandidates, (row, col) => {
+    const coast = Number.isFinite(coastDistance[row][col]) ? coastDistance[row][col] : 4;
+    const cliff = Number.isFinite(cliffDistance[row][col]) ? cliffDistance[row][col] : 4;
+    const localNoise = decorNoise(col * 0.22 + 31.3, row * 0.19 + 5.6);
+    const edgeBias = Math.max(0, 4 - surfaceNeighborCount(row, col));
+    return (
+      0.35 +
+      edgeBias * 0.95 +
+      Math.max(0, 3.2 - Math.min(3.2, coast)) * 0.45 +
+      Math.max(0, 2.8 - Math.min(2.8, cliff)) * 0.4 +
+      radiusMaskCount(visibleGroundMask, row, col, 1) * 0.12 +
+      Math.max(0, localNoise + 0.25) * 2.1
+    );
+  });
+  const rockScored = scoreCells(rockCandidates, (row, col) => {
+    const coast = Number.isFinite(coastDistance[row][col]) ? coastDistance[row][col] : 4;
+    const cliff = Number.isFinite(cliffDistance[row][col]) ? cliffDistance[row][col] : 4;
+    const localNoise = decorNoise(col * 0.19 + 101.7, row * 0.23 + 72.8);
+    const edgeBias = Math.max(0, 4 - surfaceNeighborCount(row, col));
+    return (
+      0.2 +
+      Math.max(0, 3.5 - Math.min(3.5, cliff)) * 1.5 +
+      Math.max(0, 2.5 - Math.min(2.5, coast)) * 0.7 +
+      edgeBias * 0.9 +
+      adjacencyCount(cliffMask, row, col) * 0.9 +
+      Math.max(0, localNoise + 0.15) * 1.25
+    );
+  });
+  const waterRockScored = scoreCells(waterCandidates, (row, col) => {
+    const landAdj = CARDINALS.reduce(
+      (sum, { dr, dc }) =>
+        sum +
+        (hasLandMask(flatMask, row + dr, col + dc) || hasLandMask(cliffMask, row + dr, col + dc)
+          ? 1
+          : 0),
+      0,
+    );
+    const cove = radiusMaskCount(flatMask, row, col, 2) + radiusMaskCount(cliffMask, row, col, 2);
+    const localNoise = decorNoise(col * 0.17 + 53.9, row * 0.17 + 140.2);
+    return 0.4 + landAdj * 1.7 + cove * 0.14 + Math.max(0, localNoise + 0.2) * 1.4;
+  });
+
+  const treeTarget =
+    visibleArea >= 18
+      ? Math.max(0, Math.floor(visibleArea / 32 + 2 + rng() * Math.max(2, visibleArea / 85)))
+      : 0;
+  const bushTarget = Math.max(0, Math.floor(visibleArea / 18 + 1 + rng() * Math.max(1, visibleArea / 65)));
+  const companionBushTarget = Math.max(0, Math.floor(bushTarget * (0.18 + rng() * 0.14)));
+  const rockTarget = Math.max(0, Math.floor(visibleArea / 42 + 1 + rng() * Math.max(1, visibleArea / 110)));
+  const companionRockTarget = Math.max(0, Math.floor(rockTarget * (0.18 + rng() * 0.14)));
+  const waterRockTarget = Math.max(
+    0,
+    Math.floor((waterCandidates.length / 18) * (0.9 + rng() * 0.9)),
+  );
+  const companionWaterRockTarget = Math.max(0, Math.floor(waterRockTarget * (0.42 + rng() * 0.2)));
+
+  const treeAnchors = pickSpacedAnchors(
+    treeScored,
+    treeTarget,
+    2.45 + rng() * 0.75,
+  );
+  const bushAnchors = pickSpacedAnchors(
+    bushScored,
+    Math.max(1, Math.ceil(bushTarget / (3 + rng() * 2.5))),
+    2 + rng() * 0.8,
+  );
+  const rockAnchors = pickSpacedAnchors(
+    rockScored,
+    Math.max(1, Math.ceil(rockTarget / (1.5 + rng() * 1.5))),
+    1.55 + rng() * 0.55,
+  );
+  const waterRockAnchors = pickSpacedAnchors(
+    waterRockScored,
+    Math.max(1, Math.ceil(waterRockTarget / (1.5 + rng() * 1.5))),
+    1.75 + rng() * 0.65,
+  );
+
+  const tryPlaceClustered = (
+    anchors: ScoredCell[],
+    scoredCandidates: ScoredCell[],
+    targetCount: number,
+    place: (row: number, col: number) => WfcSampleDecoration | null,
+    options: {
+      radius: number;
+      minPerCluster: number;
+      maxPerCluster: number;
+    },
+  ) => {
+    if (targetCount <= 0 || anchors.length === 0 || scoredCandidates.length === 0) {
+      return;
+    }
+    let placed = 0;
+
+    for (const anchor of anchors) {
+      if (placed >= targetCount) {
+        break;
+      }
+      const desired = Math.min(
+        targetCount - placed,
+        options.minPerCluster +
+          Math.floor(rng() * (options.maxPerCluster - options.minPerCluster + 1)),
+      );
+      const local = sortClusterCandidates(anchor, scoredCandidates, options.radius);
+
+      let clusterPlaced = 0;
+      for (const candidate of local) {
+        if (placed >= targetCount || clusterPlaced >= desired) {
+          break;
+        }
+        const decoration = place(candidate.row, candidate.col);
+        if (!decoration) {
+          continue;
+        }
+        decorations.push(decoration);
+        placed += 1;
+        clusterPlaced += 1;
+      }
+    }
+  };
+
+  tryPlaceMany(
+    treeAnchors.map(({ row, col }) => ({ row, col })),
+    treeTarget,
+    (row, col) => {
     const asset = pickOne(rng, SAMPLE_TREE_ASSETS);
     return buildDecoration(asset, 'land', row, col, 0.9, {
-      offsetX: (rng() - 0.5) * 0.16,
-      offsetY: 0.92 + (rng() - 0.5) * 0.08,
+      offsetX: (rng() - 0.5) * 0.08,
+      offsetY: 0.02 + (rng() - 0.5) * 0.05,
+      preferredSlots: rng() < 0.5 ? ['sw', 'nw'] : ['se', 'ne'],
     });
-  });
+    },
+  );
 
-  tryPlaceMany(bushCandidates, bushTarget, (row, col) => {
+  tryPlaceClustered(bushAnchors, bushScored, bushTarget, (row, col) => {
     const asset = pickOne(rng, SAMPLE_BUSH_ASSETS);
     return buildDecoration(asset, 'land', row, col, 0.45, {
-      offsetX: (rng() - 0.5) * 0.24,
-      offsetY: 0.82 + (rng() - 0.5) * 0.08,
+      offsetX: (rng() - 0.5) * 0.07,
+      offsetY: (rng() - 0.5) * 0.05,
       frameIndex: Math.floor(rng() * asset.frameCount),
+      preferredSlots: getPreferredLandEdgeSlots(row, col),
     });
+  }, {
+    radius: 3,
+    minPerCluster: 2,
+    maxPerCluster: 6,
   });
 
-  tryPlaceMany(rockCandidates, rockTarget, (row, col) => {
+  tryPlaceMany(
+    shuffleCells(
+      bushScored
+        .slice()
+        .sort((left, right) => right.score - left.score)
+        .map(({ row, col }) => ({ row, col })),
+    ),
+    companionBushTarget,
+    (row, col) => {
+    const asset = pickOne(rng, SAMPLE_BUSH_ASSETS);
+    return buildDecoration(asset, 'land', row, col, 0.22, {
+      offsetX: (rng() - 0.5) * 0.06,
+      offsetY: (rng() - 0.5) * 0.05,
+      frameIndex: Math.floor(rng() * asset.frameCount),
+      preferredSlots: getPreferredLandEdgeSlots(row, col),
+    });
+    },
+  );
+
+  tryPlaceClustered(rockAnchors, rockScored, rockTarget, (row, col) => {
     const asset = pickOne(rng, SAMPLE_ROCK_ASSETS);
     return buildDecoration(asset, 'land', row, col, 0.35, {
-      offsetX: (rng() - 0.5) * 0.22,
-      offsetY: 0.8 + (rng() - 0.5) * 0.06,
+      offsetX: (rng() - 0.5) * 0.06,
+      offsetY: (rng() - 0.5) * 0.04,
+      preferredSlots: getPreferredLandEdgeSlots(row, col),
     });
+  }, {
+    radius: 2,
+    minPerCluster: 1,
+    maxPerCluster: 3,
   });
 
-  tryPlaceMany(waterCandidates, waterRockTarget, (row, col) => {
+  tryPlaceMany(
+    shuffleCells(
+      rockScored
+        .slice()
+        .sort((left, right) => right.score - left.score)
+        .map(({ row, col }) => ({ row, col })),
+    ),
+    companionRockTarget,
+    (row, col) => {
+      const asset = pickOne(rng, SAMPLE_ROCK_ASSETS);
+      return buildDecoration(asset, 'land', row, col, 0.18, {
+        offsetX: (rng() - 0.5) * 0.05,
+        offsetY: (rng() - 0.5) * 0.05,
+        preferredSlots: getPreferredLandEdgeSlots(row, col),
+      });
+    },
+  );
+
+  tryPlaceClustered(waterRockAnchors, waterRockScored, waterRockTarget, (row, col) => {
     const asset = pickOne(rng, SAMPLE_WATER_ROCK_ASSETS);
     return buildDecoration(asset, 'water', row, col, 0.4, {
-      offsetX: (rng() - 0.5) * 0.22,
-      offsetY: 0.72 + (rng() - 0.5) * 0.08,
+      offsetX: (rng() - 0.5) * 0.05,
+      offsetY: (rng() - 0.5) * 0.05,
+      preferredSlots: getPreferredWaterEdgeSlots(row, col),
     });
+  }, {
+    radius: 3,
+    minPerCluster: 1,
+    maxPerCluster: 3,
   });
+
+  tryPlaceMany(
+    shuffleCells(
+      waterRockScored
+        .slice()
+        .sort((left, right) => right.score - left.score)
+        .map(({ row, col }) => ({ row, col })),
+    ),
+    companionWaterRockTarget,
+    (row, col) => {
+    const asset = pickOne(rng, SAMPLE_WATER_ROCK_ASSETS);
+    return buildDecoration(asset, 'water', row, col, 0.2, {
+      offsetX: (rng() - 0.5) * 0.05,
+      offsetY: (rng() - 0.5) * 0.05,
+      preferredSlots: getPreferredWaterEdgeSlots(row, col),
+    });
+    },
+  );
 
   return decorations;
 }
@@ -3386,7 +4583,7 @@ function buildSampleDecorations(
 function buildConflictAudit(
   workspace: MappingWorkspace,
   flatGrid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>,
-  elevatedGrid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>,
+  elevatedLayers: GeneratedPlateauLayer[],
 ): {
   count: number;
   cells: WfcSampleConflict[];
@@ -3489,8 +4686,10 @@ function buildConflictAudit(
     }
   };
 
-  inspectLayer(flatGrid, flatMarked, elevatedGrid, 'flat');
-  inspectLayer(elevatedGrid, elevatedMarked, undefined, 'elevated');
+  inspectLayer(flatGrid, flatMarked, elevatedLayers[0]?.topGrid, 'flat');
+  for (const elevatedLayer of elevatedLayers) {
+    inspectLayer(elevatedLayer.topGrid, elevatedMarked, undefined, 'elevated');
+  }
 
   return {
     count,
@@ -3556,6 +4755,7 @@ function flattenPlacedTiles(
 function flattenPlacedTileIds(
   grid: Array<Array<{ tileId: number; atlasKey: AtlasKey } | null>>,
   atlasKey: AtlasKey,
+  terrainLevel: number,
 ): WfcSampleTile[] {
   const tiles: WfcSampleTile[] = [];
   for (let row = 0; row < grid.length; row++) {
@@ -3569,6 +4769,7 @@ function flattenPlacedTileIds(
         col,
         tileId: tile.tileId,
         atlasKey: tile.atlasKey ?? atlasKey,
+        terrainLevel,
       });
     }
   }
